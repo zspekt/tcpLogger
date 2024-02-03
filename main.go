@@ -30,17 +30,17 @@ func init() {
 
 	home, err = os.UserHomeDir()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Error getting user's home dir -> %v\n", err)
 	}
 
 	err = os.Chdir(home)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Error cding to user's home dir -> %v\n", err)
 	}
 
 	file, err = os.OpenFile(filename, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0666)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Error opening|creating file -> %v\n", err)
 	}
 }
 
@@ -76,6 +76,6 @@ func handleConn(conn net.Conn) {
 func appendToFile(file *os.File, data string) {
 	_, err := file.WriteString(data)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Error appending to file -> %v\n", err)
 	}
 }
