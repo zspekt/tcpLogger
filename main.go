@@ -2,9 +2,11 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"log"
 	"net"
 	"os"
+	"os/exec"
 )
 
 const (
@@ -25,22 +27,22 @@ func init() {
 
 	listener, err = net.Listen(protocol, address+":"+port)
 	if err != nil {
-		log.Fatalf("Couldn't get TCP listener -> %v\n", err)
+		saveErr(err)
 	}
 
 	home, err = os.UserHomeDir()
 	if err != nil {
-		log.Fatalf("Error getting user's home dir -> %v\n", err)
+		saveErr(err)
 	}
 
 	err = os.Chdir(home)
 	if err != nil {
-		log.Fatalf("Error cding to user's home dir -> %v\n", err)
+		saveErr(err)
 	}
 
 	file, err = os.OpenFile(filename, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0666)
 	if err != nil {
-		log.Fatalf("Error opening|creating file -> %v\n", err)
+		saveErr(err)
 	}
 }
 
@@ -51,7 +53,7 @@ func main() {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Fatalf("Error accepting connection -> %v\n", err)
+			saveErr(err)
 		}
 
 		go handleConn(conn)
@@ -76,6 +78,19 @@ func handleConn(conn net.Conn) {
 func appendToFile(file *os.File, data string) {
 	_, err := file.WriteString(data)
 	if err != nil {
-		log.Fatalf("Error appending to file -> %v\n", err)
+		saveErr(err)
 	}
+}
+
+func saveErr(err error) {
+	str := err.Error()
+
+	cmd := exec.Command(
+		"sh",
+		"-c",
+		fmt.Sprintf("echo \"%v\" | systemd-cat -t tcpLogger -p emerg", str),
+	)
+	cmd.Run()
+
+	log.Fatal(err)
 }
