@@ -159,25 +159,6 @@ func setupConfig() *Config {
 	}
 }
 
-func main() {
-	e := &ArgError{
-		Err:   "this is the error",
-		Param: []string{"param1", "param2"},
-	}
-
-	identicalE := &ArgError{
-		Err:   "this is the error",
-		Param: []string{"param1", "param2"},
-	}
-
-	// anotherE := &ArgError{
-	// 	Err:   "another error, this is",
-	// 	Param: []string{"param3", "param4"},
-	// }
-
-	fmt.Println(errors.Is(e, identicalE))
-}
-
 // slog equivalent of log.Fatal()
 func slogFatal(msg string, args ...any) {
 	slog.Error(msg, args...)

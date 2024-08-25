@@ -131,7 +131,7 @@ func Test_getEnvOrDefault(t *testing.T) {
 	}
 }
 
-func Test_setup(t *testing.T) {
+func Test_setupConfig(t *testing.T) {
 	tests := []struct {
 		name string
 	}{
@@ -139,7 +139,20 @@ func Test_setup(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			setup()
+			setupConfig()
+		})
+	}
+}
+
+func Test_setupLogger(t *testing.T) {
+	tests := []struct {
+		name string
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupLogger()
 		})
 	}
 }
