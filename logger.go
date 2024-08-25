@@ -8,10 +8,6 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-func main() {
-	logger()
-}
-
 func logger() {
 	c := setupConfig()
 
@@ -29,12 +25,14 @@ func logger() {
 			slog.Info("error accepting connection. this will be logged", "error", err)
 			logger.Write([]byte(err.Error()))
 		}
+		slog.Info("accepted connection without error")
 
 		go handleConn(conn, logger)
 	}
 }
 
 func handleConn(conn net.Conn, logger *lumberjack.Logger) {
+	slog.Info("handling connection...")
 	defer conn.Close()
 
 	reader := bufio.NewReader(conn)
@@ -42,13 +40,14 @@ func handleConn(conn net.Conn, logger *lumberjack.Logger) {
 	for {
 		msg, err := reader.ReadBytes('\n') // openwrt's logd always sends a newline
 		if err != nil {                    // so no need to worry ab this
-
 			slog.Info("error reading bytes from conn reader. this will be logged", "error", err)
 			logger.Write([]byte(err.Error()))
-
 			continue
 		}
-
-		logger.Write(msg)
+		_, err = logger.Write(msg)
+		if err != nil {
+			slog.Error("error writing log entry", "error", err)
+			continue
+		}
 	}
 }
