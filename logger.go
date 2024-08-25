@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"io"
 	"log/slog"
 	"net"
 
@@ -11,6 +12,10 @@ import (
 func logger() {
 	c := setupConfig()
 
+	ch := make(chan []byte, 5)
+	defer close(ch) // channels, unlike files, don't need to be closed. doing it anyway
+
+	// lumberjack logger
 	logger := c.logger
 	defer logger.Close()
 
@@ -19,19 +24,20 @@ func logger() {
 		slogFatal("error creating listener", "error", err)
 	}
 
+	go log(ch, logger)
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			slog.Info("error accepting connection. this will be logged", "error", err)
-			logger.Write([]byte(err.Error()))
+			slog.Error("error accepting connection", "error", err)
 		}
 		slog.Info("accepted connection without error")
 
-		go handleConn(conn, logger)
+		go handleConn(conn, ch)
 	}
 }
 
-func handleConn(conn net.Conn, logger *lumberjack.Logger) {
+func handleConn(conn net.Conn, ch chan<- []byte) {
 	slog.Info("handling connection...")
 	defer conn.Close()
 
@@ -40,13 +46,31 @@ func handleConn(conn net.Conn, logger *lumberjack.Logger) {
 	for {
 		msg, err := reader.ReadBytes('\n') // openwrt's logd always sends a newline
 		if err != nil {                    // so no need to worry ab this
-			slog.Info("error reading bytes from conn reader. this will be logged", "error", err)
-			logger.Write([]byte(err.Error()))
-			continue
+			switch err {
+			case io.EOF:
+				slog.Error(
+					"EOF while reading from net.Conn reader (conn closed?). killing handleConn goroutine",
+				)
+				return
+			default:
+				slog.Error(
+					"error reading bytes from conn reader. continuing loop...",
+					"error",
+					err,
+				)
+				continue
+			}
 		}
-		_, err = logger.Write(msg)
+		ch <- msg
+	}
+}
+
+func log(ch <-chan []byte, logger *lumberjack.Logger) {
+	slog.Info("starting log routine...")
+	for msg := range ch {
+		_, err := logger.Write(msg)
 		if err != nil {
-			slog.Error("error writing log entry", "error", err)
+			slog.Error("lumberjack.Logger error writing entry. continuing loop...", "error", err)
 			continue
 		}
 	}
