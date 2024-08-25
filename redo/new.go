@@ -94,18 +94,48 @@ func getEnvOrDefaultGen[T string | bool | int](key string, def T) (T, error) {
 	return v, nil
 }
 
-// slog equivalent of log.Fatal()
-func slogFatal(msg string, args ...any) {
-	slog.Error(msg, args...)
-	os.Exit(1)
-}
-
-func setup() *Config {
+func setupLogger() *lumberjack.Logger {
 	filename, err := getEnvOrDefaultString("FILENAME", "/var/log/openwrt/openwrt.log")
 	if err != nil {
 		slogFatal(err.Error())
 	}
 
+	maxSize, err := getEnvOrDefaultInt("MAXSIZE", 0)
+	if err != nil {
+		slogFatal(err.Error())
+	}
+
+	maxAge, err := getEnvOrDefaultInt("MAXAGE", 180)
+	if err != nil {
+		slogFatal(err.Error())
+	}
+
+	maxBackups, err := getEnvOrDefaultInt("MAXBACKUP", 0)
+	if err != nil {
+		slogFatal(err.Error())
+	}
+
+	compress, err := getEnvOrDefaultBool("COMPRESS", false)
+	if err != nil {
+		slogFatal(err.Error())
+	}
+
+	useLocalTime, err := getEnvOrDefaultBool("USELOCALTIME", true)
+	if err != nil {
+		slogFatal(err.Error())
+	}
+
+	return &lumberjack.Logger{
+		Filename:   filename,
+		MaxSize:    maxSize,
+		MaxAge:     maxAge,
+		MaxBackups: maxBackups,
+		LocalTime:  useLocalTime,
+		Compress:   compress,
+	}
+}
+
+func setupConfig() *Config {
 	port, err := getEnvOrDefaultString("PORT", "8080")
 	if err != nil {
 		slogFatal(err.Error())
@@ -121,69 +151,9 @@ func setup() *Config {
 		slogFatal(err.Error())
 	}
 
-	maxSizeStr, err := getEnvOrDefaultString("MAXSIZE", "0")
-	if err != nil {
-		slogFatal(err.Error())
-	}
-
-	maxAge, err := getEnvOrDefaultString("MAXAGE", "180")
-	if err != nil {
-		slogFatal(err.Error())
-	}
-
-	maxBackups, err := getEnvOrDefaultString("MAXBACKUP", "0")
-	if err != nil {
-		slogFatal(err.Error())
-	}
-
-	compressStr, err := getEnvOrDefaultString("COMPRESS", "0")
-	if err != nil {
-		slogFatal(err.Error())
-	}
-
-	useLocalTimeStr, err := getEnvOrDefaultString("USELOCALTIME", "1")
-	if err != nil {
-		slogFatal(err.Error())
-	}
-
-	// converting to the needed types
-	maxSizeInt, err := strconv.Atoi(maxSizeStr)
-	if err != nil {
-		slogFatal(err.Error())
-	}
-
-	maxBackupsInt, err := strconv.Atoi(maxBackups)
-	if err != nil {
-		slogFatal(err.Error())
-	}
-
-	maxAgeInt, err := strconv.Atoi(maxAge)
-	if err != nil {
-		slogFatal(err.Error())
-	}
-
-	compressBool, err := strconv.ParseBool(compressStr)
-	if err != nil {
-		slogFatal(err.Error())
-	}
-
-	useLocalTimeBool, err := strconv.ParseBool(useLocalTimeStr)
-	if err != nil {
-		slogFatal(err.Error())
-	}
-
-	logger := &lumberjack.Logger{
-		Filename:   filename,
-		MaxSize:    maxSizeInt,
-		MaxAge:     maxAgeInt,
-		MaxBackups: maxBackupsInt,
-		LocalTime:  useLocalTimeBool,
-		Compress:   compressBool,
-	}
-
 	return &Config{
 		port:     port,
-		logger:   logger,
+		logger:   setupLogger(),
 		protocol: protocol,
 		address:  address,
 	}
@@ -206,4 +176,10 @@ func main() {
 	// }
 
 	fmt.Println(errors.Is(e, identicalE))
+}
+
+// slog equivalent of log.Fatal()
+func slogFatal(msg string, args ...any) {
+	slog.Error(msg, args...)
+	os.Exit(1)
 }
