@@ -1,24 +1,8 @@
 package main
 
-import "testing"
-
-func Test_slogFatal(t *testing.T) {
-	type args struct {
-		msg  string
-		args []any
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			slogFatal(tt.args.msg, tt.args.args...)
-		})
-	}
-}
+import (
+	"testing"
+)
 
 func Test_getEnvOrDefault(t *testing.T) {
 	type args struct {
@@ -31,106 +15,111 @@ func Test_getEnvOrDefault(t *testing.T) {
 
 		want string
 
-		wantErr    bool
-		wantErrStr string
+		wantErr       bool
+		wantErrTarget error
 
 		wantSetEnv bool
 		envVal     string
 	}{
 		{
 			name: "calling with empty key arg",
-			args: args{
-				key: "",
-				def: "NOTEMPTY",
+			args: args{key: "", def: "NOTEMPTY"},
+			want: "",
+
+			wantErr: true,
+			wantErrTarget: &ArgError{
+				Err:   "empty string passed as argument",
+				Param: []string{"key"},
 			},
-			want:       "",
-			wantErr:    true,
-			wantErrStr: "caller passed an empty string as key arg",
+
 			wantSetEnv: false,
 			envVal:     "",
 		},
 		{
 			name: "calling with empty def arg",
-			args: args{
-				key: "NOTEMPTY",
-				def: "",
+			args: args{key: "NOTEMPTY", def: ""},
+			want: "",
+
+			wantErr: true,
+			wantErrTarget: &ArgError{
+				Err:   "empty string passed as argument",
+				Param: []string{"def"},
 			},
-			want:       "",
-			wantErr:    true,
-			wantErrStr: "caller passed an empty string as def arg",
+
 			wantSetEnv: false,
 			envVal:     "",
 		},
 		{
 			name: "calling with empty strings for both args",
-			args: args{
-				key: "",
-				def: "",
+			args: args{key: "", def: ""},
+			want: "",
+
+			wantErr: true,
+			wantErrTarget: &ArgError{
+				Err:   "empty string passed as argument",
+				Param: []string{"key", "def"},
 			},
-			want:       "",
-			wantErr:    true,
-			wantErrStr: "caller passed empty strings for key and def arg",
+
 			wantSetEnv: false,
 			envVal:     "",
 		},
 		{
 			name: "calling with unset key arg",
-			args: args{
-				key: "THISENVVARISNOTSET",
-				def: "THISISWHATWEWANT",
-			},
-			want:       "THISISWHATWEWANT",
-			wantErr:    false,
-			wantErrStr: "",
+			args: args{key: "THISENVVARISNOTSET", def: "THISISWHATWEWANT"},
+			want: "THISISWHATWEWANT",
+
+			wantErr:       false,
+			wantErrTarget: nil,
+
 			wantSetEnv: false,
 			envVal:     "",
 		},
 		{
 			name: "calling with a set but empty key arg",
-			args: args{
-				key: "THISENVVARISEMPTY",
-				def: "THISISWHATWEWANT",
-			},
-			want:       "THISISWHATWEWANT",
-			wantErr:    false,
-			wantErrStr: "",
+			args: args{key: "THISENVVARISEMPTY", def: "THISISWHATWEWANT"},
+			want: "THISISWHATWEWANT",
+
+			wantErr:       false,
+			wantErrTarget: nil,
+
 			wantSetEnv: true,
 			envVal:     "",
 		},
 		{
 			name: "SAPBEE!!",
-			args: args{
-				key: "SAPBE",
-				def: "NOTEMPTY",
-			},
-			want:       "SAPBE",
-			wantErr:    false,
-			wantErrStr: "",
+			args: args{key: "SAPBE", def: "NOTEMPTY"},
+			want: "SAPBE",
+
+			wantErr:       false,
+			wantErrTarget: nil,
+
 			wantSetEnv: true,
 			envVal:     "SAPBE",
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.wantSetEnv {
+			if tt.wantSetEnv { // do we have to set an env var for this case?
 				t.Setenv(tt.args.key, tt.envVal)
 			}
 
-			got, err := getEnvOrDefault(tt.args.key, tt.args.def)
+			got, err := getEnvOrDefaultString(tt.args.key, tt.args.def)
 
 			if tt.wantErr { // if this is a fail case
+
 				switch {
-				case tt.wantErrStr != err.Error(): // we did get an error, but not the one we wanted
+				case tt.wantErrTarget.Error() != err.Error(): // we did get an error, but not the one we wanted
 					t.Errorf(
 						"getEnvOrDefault() got error <%v>, want error <%v>",
 						err,
-						tt.wantErrStr,
+						tt.wantErrTarget.Error(),
 					)
 
 				case err == nil: // we wanted an error, but didn't get one
 					t.Errorf(
 						"getEnvOrDefault() returned no error, want error <%v>",
-						tt.wantErrStr,
+						tt.wantErrTarget.Error(),
 					)
 				}
 			}
