@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -17,6 +18,12 @@ type ArgError struct {
 	Err   string
 	Param []string
 }
+
+type BytesReader interface {
+	ReadBytes(byte) ([]byte, error)
+}
+
+var TimeoutError error = errors.New("timeout waiting for reader")
 
 func (e *ArgError) Is(target error) bool {
 	if e.Error() != target.Error() {

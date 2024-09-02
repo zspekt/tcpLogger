@@ -1,11 +1,3 @@
-// TODO: handleConn, concurrent call or not?
-//       if yes, channel to communicate shutdown? flush writer?
-
-//			OR:
-//		      if  no, SIGINT/TERM would have to go into handleConn,
-//		      which could return a specific error type.
-//		      the type of the error would change the flow of the loop,
-//	        making it terminate
 package main
 
 import (
@@ -32,8 +24,9 @@ func logger() {
 	go log(ch, logger)
 
 	sigs := make(chan os.Signal, 1)
-	shutdwn := make(chan os.Signal, 1)
-	go shutdown(shutdwn, sigs)
+	shutdwn := make(chan struct{}, 1)
+	stopHandleConn := make(chan struct{}, 1)
+	go shutdown(shutdwn, stopHandleConn, sigs)
 
 	listener, err := net.Listen(c.protocol, c.address+":"+c.port)
 	if err != nil {
@@ -44,7 +37,7 @@ func logger() {
 
 	var conn net.Conn
 	for {
-		slog.Debug("running main for loop...")
+		slog.Info("running main for loop...")
 		select {
 		case s := <-shutdwn:
 			slog.Info(fmt.Sprintf("logger received %v signal...", s))
@@ -73,37 +66,41 @@ func logger() {
 				continue
 			}
 			slog.Info("accepted connection without error")
-			handleConn(conn, ch, shutdwn)
+			handleConn(conn, ch, stopHandleConn)
 		}
 	}
 }
 
-func handleConn(conn net.Conn, ch chan<- []byte, shutdwn <-chan os.Signal) {
+func handleConn(conn net.Conn, ch chan<- []byte, shutdwn <-chan struct{}) {
 	slog.Info("handling connection...")
 	defer conn.Close()
 
 	reader := bufio.NewReader(conn)
-
-	reader.WriteTo(&lumberjack.Logger{})
 	for {
 		select {
 		case <-shutdwn:
-
+			slog.Info("handleConn received shutdown signal. returning...")
+			return
 		default:
-			msg, err := reader.ReadBytes('\n') // openwrt's logd always sends a newline
-			if err != nil {                    // so no need to worry ab this
-				if err == io.EOF {
+			msg, err := ReadBytesWithTimeout(reader, '\n', 3*time.Second)
+			if err != nil {
+				if errors.Is(err, io.EOF) {
 					slog.Error(
 						"EOF while reading from net.Conn reader (conn closed?). continuing loop...",
 					)
-					return
-				} else {
-					slog.Error(
-						"error reading bytes from conn reader. finishing loop...",
-						"error",
-						err,
-					)
+					continue // we continue so we can (probably) handle the shutdown case.
 				}
+				if errors.Is(err, TimeoutError) {
+					slog.Error(
+						"timeout waiting to read from conn",
+					)
+					continue // we continue so we can try to read again. maybe incremental backoff?
+				}
+				slog.Error( // if we get here, something went wrong :0
+					"error reading bytes from conn reader. finishing loop...",
+					"error",
+					err,
+				)
 			}
 			ch <- msg
 		}
@@ -126,43 +123,61 @@ func log(ch <-chan []byte, logger *lumberjack.Logger) {
 	}
 }
 
-func shutdown(shutdown chan os.Signal, sigs chan os.Signal) {
+func shutdown(stopLoggerLoop, stopHandleConn chan struct{}, sigs chan os.Signal) {
 	// we register the channel so it will get these sigs
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	s := <-sigs
 	slog.Info("before sending to shutdown") // we get here
-	shutdown <- s
+	stopLoggerLoop <- struct{}{}
+	stopHandleConn <- struct{}{}
 	slog.Info(
-		fmt.Sprintf("shutdown routine caught %v sig. notifying logger routine...", s.String()),
+		fmt.Sprintf(
+			"shutdown routine caught %v sig. notifying logger routine...",
+			s.String(),
+		),
 	) // and after changing the channel buffer size from 0 to 1, we get here
 	// however, we never get to the case <- shutdwn
+}
+
+func ReadBytesWithTimeout(r BytesReader, delim byte, d time.Duration) ([]byte, error) {
+	ch := make(chan struct{})
+	var (
+		bb  []byte
+		err error
+	)
+	go func() {
+		bb, err = r.ReadBytes('\n')
+		ch <- struct{}{}
+	}()
+
+	for {
+		select {
+		case <-time.After(d):
+			return nil, TimeoutError
+		case <-ch:
+			return bb, err
+		}
+	}
 }
 
 // AcceptWithTimeout is a wrapper around the Accept() method of net.Listener
 // that will return a net.OpError if the timeout is reached before a connection
 // is accepted. Otherwise, returns conn, nil
 func AcceptWithTimeout(l net.Listener, d time.Duration) (net.Conn, error) {
-	t := time.After(d)
-	ch := make(chan struct{})
-
 	var (
 		conn net.Conn
 		err  error
 	)
+
+	ch := make(chan struct{}, 1)
 	go func() {
 		conn, err = l.Accept()
 		ch <- struct{}{}
 	}()
 	for {
 		select {
-		case <-t:
-			return nil, &net.OpError{
-				Op:     "accept",
-				Net:    "tcp",
-				Source: nil,
-				Addr:   nil,
-				Err:    errors.New("listener accept conn timeout"),
-			}
+		case <-time.After(d):
+			return nil, TimeoutError
 		case <-ch:
 			if err != nil {
 				return nil, err
