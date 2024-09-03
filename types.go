@@ -23,7 +23,10 @@ type BytesReader interface {
 	ReadBytes(byte) ([]byte, error)
 }
 
-var TimeoutError error = errors.New("timeout waiting for reader")
+var (
+	NetTimeoutError  error = errors.New("timeout waiting for connection")
+	ReadTimeoutError error = errors.New("timeout waiting for reader")
+)
 
 func (e *ArgError) Is(target error) bool {
 	if e.Error() != target.Error() {

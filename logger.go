@@ -90,7 +90,7 @@ func handleConn(conn net.Conn, ch chan<- []byte, shutdwn <-chan struct{}) {
 					)
 					continue // we continue so we can (probably) handle the shutdown case.
 				}
-				if errors.Is(err, TimeoutError) {
+				if errors.Is(err, ReadTimeoutError) {
 					slog.Error(
 						"timeout waiting to read from conn",
 					)
@@ -153,7 +153,7 @@ func ReadBytesWithTimeout(r BytesReader, delim byte, d time.Duration) ([]byte, e
 	for {
 		select {
 		case <-time.After(d):
-			return nil, TimeoutError
+			return nil, ReadTimeoutError
 		case <-ch:
 			return bb, err
 		}
@@ -177,7 +177,7 @@ func AcceptWithTimeout(l net.Listener, d time.Duration) (net.Conn, error) {
 	for {
 		select {
 		case <-time.After(d):
-			return nil, TimeoutError
+			return nil, NetTimeoutError
 		case <-ch:
 			if err != nil {
 				return nil, err
