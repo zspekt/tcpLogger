@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"reflect"
 	"sync"
 	"syscall"
 	"testing"
@@ -380,7 +379,7 @@ func Test_shutdown(t *testing.T) {
 
 func TestReadBytesWithTimeout(t *testing.T) {
 	type args struct {
-		r     ByteReader
+		r     BytesReader
 		delim byte
 		d     time.Duration
 	}
@@ -394,27 +393,27 @@ func TestReadBytesWithTimeout(t *testing.T) {
 	}{
 		{
 			name:        "will timeout",
-			args:        args{r: nil, delim: '\n', d: 1 * time.Second},
+			args:        args{r: nil, delim: '\n', d: 250 * time.Millisecond},
 			want:        nil,
-			wantErr:     TimeoutError,
+			wantErr:     ReadTimeoutError,
 			bytes:       text1,
-			readerDelay: 2 * time.Second,
+			readerDelay: 500 * time.Millisecond,
 		},
 		{
 			name:        "reading from text1 reader. shouldn't time out",
-			args:        args{r: nil, delim: '\n', d: 2 * time.Second},
+			args:        args{r: nil, delim: '\n', d: 500 * time.Millisecond},
 			want:        []byte("Lorem ipsum dolor sit amet, consectetuer adipiscing elit.\n"),
 			wantErr:     nil,
 			bytes:       text1,
-			readerDelay: 1 * time.Second,
+			readerDelay: 250 * time.Millisecond,
 		},
 		{
 			name:        "reading from text2 reader. shouldn't time out",
-			args:        args{r: nil, delim: '\n', d: 2 * time.Second},
+			args:        args{r: nil, delim: '\n', d: 500 * time.Millisecond},
 			want:        []byte("Lorem TEXT2 dolor sit amet, consectetuer adipiscing elit.\n"),
 			wantErr:     nil,
 			bytes:       text2,
-			readerDelay: 1 * time.Second,
+			readerDelay: 250 * time.Millisecond,
 		},
 	}
 	for _, tt := range tests {
@@ -457,28 +456,71 @@ func TestAcceptWithTimeout(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    net.Conn
+		want    net.Conn // can't really test what i GET because tcpconn has unexported fields
 		wantErr error
+		delay   time.Duration
 	}{
 		{
 			name: "conn is stablished before timeout",
 			args: args{
 				l: nil,
-				d: 5,
+				d: 500 * time.Millisecond,
 			},
 			want:    nil,
 			wantErr: nil,
+			delay:   250 * time.Millisecond,
+		},
+		{
+			name: "timeout is reached before conn",
+			args: args{
+				l: nil,
+				d: 250 * time.Millisecond,
+			},
+			want:    nil,
+			wantErr: NetTimeoutError,
+			delay:   500 * time.Millisecond,
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			var err error
+
+			defer func() { // cleaning up
+				if tt.args.l != nil {
+					tt.args.l.Close()
+				}
+			}()
+
+			tt.args.l, err = net.Listen("tcp", "localhost:8080")
+			if err != nil {
+				t.Error(err)
+				return
+			}
+
+			go func() {
+				if tt.delay > tt.args.d { // if we're supposed to timeout
+					return
+				}
+				time.Sleep(tt.delay)
+				_, err := net.Dial("tcp", "localhost:8080")
+				if err != nil {
+					t.Errorf("error dialing conn")
+					return
+				}
+			}()
 			got, err := AcceptWithTimeout(tt.args.l, tt.args.d)
-			if (err != nil) != (tt.wantErr == nil) { // if we got an error, but didn't want one
+
+			if err != tt.wantErr {
 				t.Errorf("AcceptWithTimeout() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("AcceptWithTimeout() = %v, want %v", got, tt.want)
+
+			if tt.wantErr == nil {
+				if _, ok := got.(*net.TCPConn); !ok {
+					t.Errorf("AcceptWithTimeout() net.TCPConn assertion on got value failed")
+					return
+				}
 			}
 		})
 	}
