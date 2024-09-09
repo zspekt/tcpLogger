@@ -179,19 +179,166 @@ func Test_logger(t *testing.T) {
 func Test_handleConn(t *testing.T) {
 	type args struct {
 		conn    net.Conn
-		ch      chan<- []byte
-		shutdwn <-chan struct{}
+		ch      chan []byte
+		shutdwn chan struct{}
 	}
 	tests := []struct {
-		name string
-		args args
+		name           string
+		args           args
+		bytes          []byte
+		gotBytes       []byte
+		wantBytes      []byte
+		shutdwnDelay   time.Duration
+		connCloseDelay time.Duration
+		shouldClose    bool
+		sigs           chan os.Signal
+		throwawayChan  chan struct{}
 	}{
-		// TODO: Add test cases.
+		{
+			name: "sending and receiving all the bytes of text1",
+			args: args{
+				conn:    nil,
+				ch:      make(chan []byte, 10),
+				shutdwn: make(chan struct{}, 1),
+			},
+			bytes:          text1,
+			gotBytes:       []byte{},
+			wantBytes:      text1,
+			shutdwnDelay:   1 * time.Second,
+			connCloseDelay: 1 * time.Second,
+			shouldClose:    true,
+			sigs:           make(chan os.Signal, 1),
+			throwawayChan:  make(chan struct{}, 1),
+		},
+		{
+			name: "sending and receiving all the bytes of text2",
+			args: args{
+				conn:    nil,
+				ch:      make(chan []byte, 10),
+				shutdwn: make(chan struct{}, 1),
+			},
+			bytes:          text2,
+			gotBytes:       []byte{},
+			wantBytes:      text2,
+			shutdwnDelay:   1 * time.Second,
+			connCloseDelay: 1 * time.Second,
+			shouldClose:    true,
+			sigs:           make(chan os.Signal, 1),
+			throwawayChan:  make(chan struct{}, 1),
+		},
+		{
+			name: "shutdwn signal should prevent any work being done",
+			args: args{
+				conn:    nil,
+				ch:      make(chan []byte, 10),
+				shutdwn: make(chan struct{}, 1),
+			},
+			bytes:          text2,
+			gotBytes:       []byte{},
+			wantBytes:      []byte{},
+			shutdwnDelay:   0 * time.Second,
+			connCloseDelay: 0 * time.Second,
+			shouldClose:    true,
+			sigs:           make(chan os.Signal, 1),
+			throwawayChan:  make(chan struct{}, 1),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			l, err := net.Listen("tcp", ":0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			addr := l.Addr().String()
+
+			go receiveAndAppend(t, &tt.gotBytes, tt.args.ch)
+			go dialAndWrite(t, tt.bytes, addr, tt.connCloseDelay, tt.shouldClose)
+			go shutdown(tt.throwawayChan, tt.args.shutdwn, tt.sigs)
+
+			go func() {
+				time.Sleep(tt.shutdwnDelay)
+				tt.sigs <- syscall.SIGINT
+			}()
+
+			tt.args.conn, err = l.Accept()
+			if err != nil {
+				t.Fatal(err)
+			}
+
 			handleConn(tt.args.conn, tt.args.ch, tt.args.shutdwn)
+
+			// post func checking
+			if !bytes.Equal(tt.gotBytes, tt.wantBytes) {
+				t.Errorf("got:\n%v\nwant:\n%v", string(tt.gotBytes), string(tt.wantBytes))
+			}
 		})
+	}
+}
+
+func shutterDwn(t *testing.T, d time.Duration) {
+	t.Helper()
+	time.Sleep(d)
+}
+
+// (FOR TESTING ONLY) receives the messages from handleConn,
+// and appends them to a slice, so we can check if anything was missed
+func receiveAndAppend(t *testing.T, b *[]byte, ch <-chan []byte) {
+	t.Helper()
+	for {
+		msg, ok := <-ch
+		if !ok {
+			slog.Info("channel closed? breaking out of receiveAndAppend loop...")
+			break
+		}
+		*b = append(*b, msg...)
+	}
+}
+
+// (FOR TESTING ONLY) connects via tcp and sends data.
+// closes the connection when it's done.
+func dialAndWrite(
+	t *testing.T,
+	b []byte,
+	addr string,
+	closingDelay time.Duration,
+	shouldClose bool,
+) {
+	t.Helper()
+	defer slog.Info("dialAndWrite has exited.")
+
+	var (
+		proto = "tcp"
+		r     = bufio.NewReader(bytes.NewReader(b))
+	)
+	conn, err := net.Dial(proto, addr)
+	if err != nil {
+		t.Fatal(err)
+		return
+	}
+	slog.Info("dialAndWrite(): stablished tcp conn")
+
+	if shouldClose {
+		defer func() {
+			time.Sleep(closingDelay)
+			conn.Close()
+		}()
+	}
+
+	for {
+		msg, err := r.ReadBytes('\n')
+		if err != nil {
+			if err == io.EOF {
+				slog.Info("reached EOF. checking byte slice...")
+				if len(msg) == 0 {
+					slog.Info("nothing left in byte slice after EOF. breaking")
+					break
+				}
+				conn.Write(msg)
+				break
+			}
+			t.Fatal(err)
+		}
+		conn.Write(msg)
 	}
 }
 
@@ -356,8 +503,10 @@ func Test_shutdown(t *testing.T) {
 				for {
 					select {
 					case <-tt.args.stopHandleConn:
+						slog.Info("Test_shutdown: stopHandleConn channel got signal")
 						wg.Done()
 					case <-tt.args.stopLoggerLoop:
+						slog.Info("Test_shutdown: stopLoggerLoop channel got signal")
 						wg.Done()
 					}
 				}
@@ -366,6 +515,7 @@ func Test_shutdown(t *testing.T) {
 			go func() {
 				time.Sleep(500 * time.Millisecond)
 				syscall.Kill(syscall.Getpid(), tt.signal.(syscall.Signal))
+				// tt.args.sigs <- tt.signal
 			}()
 
 			shutdown(tt.args.stopLoggerLoop, tt.args.stopHandleConn, tt.args.sigs)
@@ -492,18 +642,19 @@ func TestAcceptWithTimeout(t *testing.T) {
 				}
 			}()
 
-			tt.args.l, err = net.Listen("tcp", "localhost:8080")
+			tt.args.l, err = net.Listen("tcp", ":0")
 			if err != nil {
 				t.Error(err)
 				return
 			}
+			addr := tt.args.l.Addr().String()
 
 			go func() {
 				if tt.delay > tt.args.d { // if we're supposed to timeout
 					return
 				}
 				time.Sleep(tt.delay)
-				_, err := net.Dial("tcp", "localhost:8080")
+				_, err := net.Dial("tcp", addr)
 				if err != nil {
 					t.Errorf("error dialing conn")
 					return

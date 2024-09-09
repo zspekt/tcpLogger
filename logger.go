@@ -34,7 +34,6 @@ func logger() {
 	}
 
 	// declaring it here so we can close it on case <-shutdwn
-
 	var conn net.Conn
 	for {
 		slog.Info("running main for loop...")
@@ -48,7 +47,6 @@ func logger() {
 					slog.Error("error closing connection", "error", err)
 				}
 			}
-			time.Sleep(5 * time.Second)
 			slog.Info("closing channel...")
 			close(ch)
 
@@ -59,8 +57,8 @@ func logger() {
 			}
 			return
 		default:
-			slog.Debug("running default case on main for select loop...")
-			conn, err = AcceptWithTimeout(listener, 3*time.Second)
+			slog.Info("running default case on main for select loop...")
+			conn, err = AcceptWithTimeout(listener, 9*time.Second)
 			if err != nil {
 				slog.Error("error accepting connection", "error", err)
 				continue
@@ -86,9 +84,10 @@ func handleConn(conn net.Conn, ch chan<- []byte, shutdwn <-chan struct{}) {
 			if err != nil {
 				if errors.Is(err, io.EOF) {
 					slog.Error(
-						"EOF while reading from net.Conn reader (conn closed?). continuing loop...",
+						"EOF while reading from net.Conn reader (conn closed?). returning",
 					)
-					continue // we continue so we can (probably) handle the shutdown case.
+					return
+					// continue this doesn't make sense wtf // we continue so we can (probably) handle the shutdown case.
 				}
 				if errors.Is(err, ReadTimeoutError) {
 					slog.Error(
@@ -102,7 +101,9 @@ func handleConn(conn net.Conn, ch chan<- []byte, shutdwn <-chan struct{}) {
 					err,
 				)
 			}
-			ch <- msg
+			if len(msg) > 0 {
+				ch <- msg
+			}
 		}
 	}
 }
@@ -111,6 +112,7 @@ func log(ch <-chan []byte, logger *lumberjack.Logger) {
 	slog.Info("starting log routine...")
 	for {
 		msg, ok := <-ch
+		slog.Info("log routine got message", "msg", msg)
 		if !ok { // channel is closed == we're shutting down (should be last step)
 			slog.Info("log routine met with closed channel (shutting down?). returning...")
 			return
@@ -153,8 +155,14 @@ func ReadBytesWithTimeout(r BytesReader, delim byte, d time.Duration) ([]byte, e
 	for {
 		select {
 		case <-time.After(d):
+			slog.Error("timeout reading from conn. returning ReadTimeoutError")
 			return nil, ReadTimeoutError
 		case <-ch:
+			slog.Info("Successfully reading from conn")
+			if len(bb) == 0 {
+				slog.Error("successfully read MY ASS. this byte slice is empty")
+				return nil, err
+			}
 			return bb, err
 		}
 	}
