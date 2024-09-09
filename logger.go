@@ -15,9 +15,7 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-func logger() {
-	c := setupConfig()
-
+func logger(c *Config) {
 	ch := make(chan []byte, 5)
 	logger := c.logger
 	defer logger.Close()

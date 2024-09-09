@@ -1,5 +1,6 @@
 package main
 
 func main() {
-	logger()
+	c := setupConfig()
+	logger(c)
 }
