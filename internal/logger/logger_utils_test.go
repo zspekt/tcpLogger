@@ -15,142 +15,6 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-var text2 []byte = []byte(`Lorem TEXT2 dolor sit amet, consectetuer adipiscing elit.
-Vestibulum wisi massa, pulvinar vitae, vestibulum id, vestibulum et, erat.
-Cras imperdiet.
-Vivamus sed nunc sed pede tempor dictum.
-Etiam at wisi sit amet nulla tincidunt mollis.
-Sed eget TEXT2.
-Cras sit amet massa id odio nonummy fringilla.
-Aliquam eu velit et dolor varius egestas.
-Phasellus congue.
-Proin nec ante.
-Phasellus vestibulum nulla semper lorem.
-Sed tincidunt magna vitae nulla.
-Sed sagittis congue risus.
-Nam erat felis, rutrum non, ultricies et, nonummy vel, enim.
-Praesent felis neque, venenatis et, hendrerit vitae, semper vel, erat.
-Integer iaculis purus ut turpis.
-Aliquam erat volutpat.
-Praesent accumsan orci et odio.
-Nullam metus dolor, venenatis a, sodales in, vestibulum in, enim.
-Proin erat dui, pharetra ac, dapibus vitae, malesuada non, ante.
-Integer sapien.
-Praesent facilisis odio sit amet nunc.
-In dapibus.
-Integer tellus.
-Phasellus ac tellus et quam ultricies volutpat.
-Sed dolor orci, mattis ut, condimentum id, aliquet at, eros.
-In sed nibh.
-Maecenas eleifend commodo sem.
-Nam eleifend eleifend leo.
-Suspendisse magna ante, fringilla vel, euismod ac, rhoncus nec, enim.
-Maecenas libero purus, tincidunt vel, dignissim ut, faucibus a, dui.
-Proin non turpis vel dolor mattis facilisis.
-Nullam condimentum, enim vitae volutpat varius, lacus dolor pellentesque urna, ac lobortis pede massa id felis.
-Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.
-Sed convallis.
-Aliquam vehicula urna eget enim.
-Aenean odio massa, sollicitudin quis, rhoncus vel, cursus et, dolor.
-Nulla pretium euismod lacus.
-Vestibulum ante TEXT2 primis in faucibus orci luctus et ultrices posuere cubilia Curae; Cras est.
-Donec tincidunt.
-Fusce risus est, lacinia quis, interdum sed, adipiscing a, elit.
-Fusce vel nunc eget est iaculis sagittis.
-Morbi pulvinar.
-Curabitur id ligula.
-Sed nec orci at lorem lobortis laoreet.
-Nam tincidunt euismod ligula.
-Morbi ullamcorper tellus in lectus.
-Sed elementum urna semper neque.
-Donec luctus iaculis odio.
-Nulla ultrices.
-In tempor.
-Morbi felis.
-Vivamus sodales.
-Phasellus sem.
-Proin at massa quis arcu pretium mattis.
-Cras vel velit.
-Nam rutrum erat a risus.
-Vestibulum lorem purus, imperdiet quis, vestibulum sit amet, posuere at, dolor.
-Cras vehicula euismod ante.
-Donec sagittis blandit purus.
-Aliquam vitae leo eget orci dictum molestie.
-Donec sit amet diam sed nunc pharetra elementum.
-Quisque rutrum augue vel sapien.
-Nam turpis.
-Praesent diam leo, consequat vel, egestas nec, tempor ut, nisl.
-Maecenas eu odio vel mi euismod tincidunt.
-`)
-
-var text1 []byte = []byte(`Lorem ipsum dolor sit amet, consectetuer adipiscing elit.
-Vestibulum wisi massa, pulvinar vitae, vestibulum id, vestibulum et, erat.
-Cras imperdiet.
-Vivamus sed nunc sed pede tempor dictum.
-Etiam at wisi sit amet nulla tincidunt mollis.
-Sed eget ipsum.
-Cras sit amet massa id odio nonummy fringilla.
-Aliquam eu velit et dolor varius egestas.
-Phasellus congue.
-Proin nec ante.
-Phasellus vestibulum nulla semper lorem.
-Sed tincidunt magna vitae nulla.
-Sed sagittis congue risus.
-Nam erat felis, rutrum non, ultricies et, nonummy vel, enim.
-Praesent felis neque, venenatis et, hendrerit vitae, semper vel, erat.
-Integer iaculis purus ut turpis.
-Aliquam erat volutpat.
-Praesent accumsan orci et odio.
-Nullam metus dolor, venenatis a, sodales in, vestibulum in, enim.
-Proin erat dui, pharetra ac, dapibus vitae, malesuada non, ante.
-Integer sapien.
-Praesent facilisis odio sit amet nunc.
-In dapibus.
-Integer tellus.
-Phasellus ac tellus et quam ultricies volutpat.
-Sed dolor orci, mattis ut, condimentum id, aliquet at, eros.
-In sed nibh.
-Maecenas eleifend commodo sem.
-Nam eleifend eleifend leo.
-Suspendisse magna ante, fringilla vel, euismod ac, rhoncus nec, enim.
-Maecenas libero purus, tincidunt vel, dignissim ut, faucibus a, dui.
-Proin non turpis vel dolor mattis facilisis.
-Nullam condimentum, enim vitae volutpat varius, lacus dolor pellentesque urna, ac lobortis pede massa id felis.
-Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.
-Sed convallis.
-Aliquam vehicula urna eget enim.
-Aenean odio massa, sollicitudin quis, rhoncus vel, cursus et, dolor.
-Nulla pretium euismod lacus.
-Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Cras est.
-Donec tincidunt.
-Fusce risus est, lacinia quis, interdum sed, adipiscing a, elit.
-Fusce vel nunc eget est iaculis sagittis.
-Morbi pulvinar.
-Curabitur id ligula.
-Sed nec orci at lorem lobortis laoreet.
-Nam tincidunt euismod ligula.
-Morbi ullamcorper tellus in lectus.
-Sed elementum urna semper neque.
-Donec luctus iaculis odio.
-Nulla ultrices.
-In tempor.
-Morbi felis.
-Vivamus sodales.
-Phasellus sem.
-Proin at massa quis arcu pretium mattis.
-Cras vel velit.
-Nam rutrum erat a risus.
-Vestibulum lorem purus, imperdiet quis, vestibulum sit amet, posuere at, dolor.
-Cras vehicula euismod ante.
-Donec sagittis blandit purus.
-Aliquam vitae leo eget orci dictum molestie.
-Donec sit amet diam sed nunc pharetra elementum.
-Quisque rutrum augue vel sapien.
-Nam turpis.
-Praesent diam leo, consequat vel, egestas nec, tempor ut, nisl.
-Maecenas eu odio vel mi euismod tincidunt.
-`)
-
 type delayedReader struct {
 	r *bufio.Reader
 	d time.Duration
@@ -660,3 +524,139 @@ func TestAcceptWithTimeout(t *testing.T) {
 		})
 	}
 }
+
+var text2 []byte = []byte(`Lorem TEXT2 dolor sit amet, consectetuer adipiscing elit.
+Vestibulum wisi massa, pulvinar vitae, vestibulum id, vestibulum et, erat.
+Cras imperdiet.
+Vivamus sed nunc sed pede tempor dictum.
+Etiam at wisi sit amet nulla tincidunt mollis.
+Sed eget TEXT2.
+Cras sit amet massa id odio nonummy fringilla.
+Aliquam eu velit et dolor varius egestas.
+Phasellus congue.
+Proin nec ante.
+Phasellus vestibulum nulla semper lorem.
+Sed tincidunt magna vitae nulla.
+Sed sagittis congue risus.
+Nam erat felis, rutrum non, ultricies et, nonummy vel, enim.
+Praesent felis neque, venenatis et, hendrerit vitae, semper vel, erat.
+Integer iaculis purus ut turpis.
+Aliquam erat volutpat.
+Praesent accumsan orci et odio.
+Nullam metus dolor, venenatis a, sodales in, vestibulum in, enim.
+Proin erat dui, pharetra ac, dapibus vitae, malesuada non, ante.
+Integer sapien.
+Praesent facilisis odio sit amet nunc.
+In dapibus.
+Integer tellus.
+Phasellus ac tellus et quam ultricies volutpat.
+Sed dolor orci, mattis ut, condimentum id, aliquet at, eros.
+In sed nibh.
+Maecenas eleifend commodo sem.
+Nam eleifend eleifend leo.
+Suspendisse magna ante, fringilla vel, euismod ac, rhoncus nec, enim.
+Maecenas libero purus, tincidunt vel, dignissim ut, faucibus a, dui.
+Proin non turpis vel dolor mattis facilisis.
+Nullam condimentum, enim vitae volutpat varius, lacus dolor pellentesque urna, ac lobortis pede massa id felis.
+Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.
+Sed convallis.
+Aliquam vehicula urna eget enim.
+Aenean odio massa, sollicitudin quis, rhoncus vel, cursus et, dolor.
+Nulla pretium euismod lacus.
+Vestibulum ante TEXT2 primis in faucibus orci luctus et ultrices posuere cubilia Curae; Cras est.
+Donec tincidunt.
+Fusce risus est, lacinia quis, interdum sed, adipiscing a, elit.
+Fusce vel nunc eget est iaculis sagittis.
+Morbi pulvinar.
+Curabitur id ligula.
+Sed nec orci at lorem lobortis laoreet.
+Nam tincidunt euismod ligula.
+Morbi ullamcorper tellus in lectus.
+Sed elementum urna semper neque.
+Donec luctus iaculis odio.
+Nulla ultrices.
+In tempor.
+Morbi felis.
+Vivamus sodales.
+Phasellus sem.
+Proin at massa quis arcu pretium mattis.
+Cras vel velit.
+Nam rutrum erat a risus.
+Vestibulum lorem purus, imperdiet quis, vestibulum sit amet, posuere at, dolor.
+Cras vehicula euismod ante.
+Donec sagittis blandit purus.
+Aliquam vitae leo eget orci dictum molestie.
+Donec sit amet diam sed nunc pharetra elementum.
+Quisque rutrum augue vel sapien.
+Nam turpis.
+Praesent diam leo, consequat vel, egestas nec, tempor ut, nisl.
+Maecenas eu odio vel mi euismod tincidunt.
+`)
+
+var text1 []byte = []byte(`Lorem ipsum dolor sit amet, consectetuer adipiscing elit.
+Vestibulum wisi massa, pulvinar vitae, vestibulum id, vestibulum et, erat.
+Cras imperdiet.
+Vivamus sed nunc sed pede tempor dictum.
+Etiam at wisi sit amet nulla tincidunt mollis.
+Sed eget ipsum.
+Cras sit amet massa id odio nonummy fringilla.
+Aliquam eu velit et dolor varius egestas.
+Phasellus congue.
+Proin nec ante.
+Phasellus vestibulum nulla semper lorem.
+Sed tincidunt magna vitae nulla.
+Sed sagittis congue risus.
+Nam erat felis, rutrum non, ultricies et, nonummy vel, enim.
+Praesent felis neque, venenatis et, hendrerit vitae, semper vel, erat.
+Integer iaculis purus ut turpis.
+Aliquam erat volutpat.
+Praesent accumsan orci et odio.
+Nullam metus dolor, venenatis a, sodales in, vestibulum in, enim.
+Proin erat dui, pharetra ac, dapibus vitae, malesuada non, ante.
+Integer sapien.
+Praesent facilisis odio sit amet nunc.
+In dapibus.
+Integer tellus.
+Phasellus ac tellus et quam ultricies volutpat.
+Sed dolor orci, mattis ut, condimentum id, aliquet at, eros.
+In sed nibh.
+Maecenas eleifend commodo sem.
+Nam eleifend eleifend leo.
+Suspendisse magna ante, fringilla vel, euismod ac, rhoncus nec, enim.
+Maecenas libero purus, tincidunt vel, dignissim ut, faucibus a, dui.
+Proin non turpis vel dolor mattis facilisis.
+Nullam condimentum, enim vitae volutpat varius, lacus dolor pellentesque urna, ac lobortis pede massa id felis.
+Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.
+Sed convallis.
+Aliquam vehicula urna eget enim.
+Aenean odio massa, sollicitudin quis, rhoncus vel, cursus et, dolor.
+Nulla pretium euismod lacus.
+Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Cras est.
+Donec tincidunt.
+Fusce risus est, lacinia quis, interdum sed, adipiscing a, elit.
+Fusce vel nunc eget est iaculis sagittis.
+Morbi pulvinar.
+Curabitur id ligula.
+Sed nec orci at lorem lobortis laoreet.
+Nam tincidunt euismod ligula.
+Morbi ullamcorper tellus in lectus.
+Sed elementum urna semper neque.
+Donec luctus iaculis odio.
+Nulla ultrices.
+In tempor.
+Morbi felis.
+Vivamus sodales.
+Phasellus sem.
+Proin at massa quis arcu pretium mattis.
+Cras vel velit.
+Nam rutrum erat a risus.
+Vestibulum lorem purus, imperdiet quis, vestibulum sit amet, posuere at, dolor.
+Cras vehicula euismod ante.
+Donec sagittis blandit purus.
+Aliquam vitae leo eget orci dictum molestie.
+Donec sit amet diam sed nunc pharetra elementum.
+Quisque rutrum augue vel sapien.
+Nam turpis.
+Praesent diam leo, consequat vel, egestas nec, tempor ut, nisl.
+Maecenas eu odio vel mi euismod tincidunt.
+`)
