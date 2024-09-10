@@ -1,4 +1,4 @@
-package main
+package logger
 
 import (
 	"bufio"
@@ -14,6 +14,10 @@ import (
 
 	"gopkg.in/natefinch/lumberjack.v2"
 )
+
+type BytesReader interface {
+	ReadBytes(byte) ([]byte, error)
+}
 
 func handleConn(conn net.Conn, ch chan<- []byte, shutdwn <-chan struct{}) {
 	slog.Info("handling connection...")

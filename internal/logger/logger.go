@@ -1,4 +1,4 @@
-package main
+package logger
 
 import (
 	"fmt"
@@ -6,11 +6,14 @@ import (
 	"net"
 	"os"
 	"time"
+
+	"github.com/zspekt/tcpLogger/internal/setup"
+	"github.com/zspekt/tcpLogger/internal/utils"
 )
 
-func logger(c *Config) {
+func Run(c *setup.Cfg) {
 	ch := make(chan []byte, 5)
-	logger := c.logger
+	logger := c.Logger
 	defer logger.Close()
 	go log(ch, logger)
 
@@ -19,9 +22,9 @@ func logger(c *Config) {
 	stopHandleConn := make(chan struct{}, 1)
 	go shutdown(shutdwn, stopHandleConn, sigs)
 
-	listener, err := net.Listen(c.protocol, c.address+":"+c.port)
+	listener, err := net.Listen(c.Protocol, c.Address+":"+c.Port)
 	if err != nil {
-		slogFatal("logger(): fatal error creating listener", "error", err)
+		utils.SlogFatal("logger(): fatal error creating listener", "error", err)
 	}
 	defer listener.Close()
 

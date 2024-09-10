@@ -1,4 +1,4 @@
-package main
+package setup
 
 import (
 	"fmt"
@@ -7,7 +7,33 @@ import (
 	"strconv"
 
 	"gopkg.in/natefinch/lumberjack.v2"
+
+	"github.com/zspekt/tcpLogger/internal/utils"
 )
+
+type Cfg struct {
+	Port     string
+	Logger   *lumberjack.Logger
+	Protocol string
+	Address  string
+}
+
+type ArgError struct {
+	Err   string
+	Param []string
+}
+
+func (e *ArgError) Is(target error) bool {
+	if e.Error() != target.Error() {
+		return false
+	}
+
+	return true
+}
+
+func (e *ArgError) Error() string {
+	return e.Err + ": " + fmt.Sprint(e.Param)
+}
 
 func getEnvOrDefaultString(key, def string) (string, error) {
 	v, err := getEnvOrDefaultGen(key, def)
@@ -43,8 +69,6 @@ func getEnvOrDefaultGen[T string | bool | int](key string, def T) (T, error) {
 		// we can only check for zero values on strings
 		// as both a 0 int, and a false bool aren't
 		// invalid in this situation
-
-		// err: "",
 		case key == "" && defStr == "":
 			return v, &ArgError{
 				Err:   "empty string passed as argument",
@@ -93,35 +117,35 @@ func getEnvOrDefaultGen[T string | bool | int](key string, def T) (T, error) {
 	return v, nil
 }
 
-func setupLogger() *lumberjack.Logger {
+func logger() *lumberjack.Logger {
 	filename, err := getEnvOrDefaultString("FILENAME", "/var/log/openwrt/openwrt.log")
 	if err != nil {
-		slogFatal(err.Error())
+		utils.SlogFatal(err.Error())
 	}
 
 	maxSize, err := getEnvOrDefaultInt("MAXSIZE", 0)
 	if err != nil {
-		slogFatal(err.Error())
+		utils.SlogFatal(err.Error())
 	}
 
 	maxAge, err := getEnvOrDefaultInt("MAXAGE", 180)
 	if err != nil {
-		slogFatal(err.Error())
+		utils.SlogFatal(err.Error())
 	}
 
 	maxBackups, err := getEnvOrDefaultInt("MAXBACKUP", 0)
 	if err != nil {
-		slogFatal(err.Error())
+		utils.SlogFatal(err.Error())
 	}
 
 	compress, err := getEnvOrDefaultBool("COMPRESS", false)
 	if err != nil {
-		slogFatal(err.Error())
+		utils.SlogFatal(err.Error())
 	}
 
 	useLocalTime, err := getEnvOrDefaultBool("USELOCALTIME", true)
 	if err != nil {
-		slogFatal(err.Error())
+		utils.SlogFatal(err.Error())
 	}
 
 	return &lumberjack.Logger{
@@ -134,32 +158,26 @@ func setupLogger() *lumberjack.Logger {
 	}
 }
 
-func setupConfig() *Config {
+func Config() *Cfg {
 	port, err := getEnvOrDefaultString("PORT", "8080")
 	if err != nil {
-		slogFatal(err.Error())
+		utils.SlogFatal(err.Error())
 	}
 
 	protocol, err := getEnvOrDefaultString("PROTOCOL", "tcp")
 	if err != nil {
-		slogFatal(err.Error())
+		utils.SlogFatal(err.Error())
 	}
 
 	address, err := getEnvOrDefaultString("ADDRESS", "localhost")
 	if err != nil {
-		slogFatal(err.Error())
+		utils.SlogFatal(err.Error())
 	}
 
-	return &Config{
-		port:     port,
-		logger:   setupLogger(),
-		protocol: protocol,
-		address:  address,
+	return &Cfg{
+		Port:     port,
+		Logger:   logger(),
+		Protocol: protocol,
+		Address:  address,
 	}
-}
-
-// slog equivalent of log.Fatal()
-func slogFatal(msg string, args ...any) {
-	slog.Error(msg, args...)
-	os.Exit(1)
 }

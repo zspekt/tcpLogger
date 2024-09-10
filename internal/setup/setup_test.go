@@ -1,4 +1,4 @@
-package main
+package setup
 
 import (
 	"testing"
@@ -139,7 +139,7 @@ func Test_setupConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			setupConfig()
+			Config()
 		})
 	}
 }
@@ -152,7 +152,7 @@ func Test_setupLogger(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			setupLogger()
+			logger()
 		})
 	}
 }

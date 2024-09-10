@@ -1,4 +1,4 @@
-package main
+package logger
 
 import (
 	"bufio"
@@ -402,10 +402,7 @@ func Test_log(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := os.Remove(tt.args.logger.Filename)
-			if err != nil {
-				t.Fatal(err)
-			}
+			defer os.Remove(tt.args.logger.Filename)
 			go log(tt.args.ch, tt.args.logger)
 
 			// f, err := os.Create(tt.args.logger.Filename)

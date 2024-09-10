@@ -1,4 +1,4 @@
-package main
+package logger
 
 import (
 	"net"
@@ -6,12 +6,14 @@ import (
 	"testing"
 
 	"gopkg.in/natefinch/lumberjack.v2"
+
+	"github.com/zspekt/tcpLogger/internal/setup"
 )
 
 func Test_logger(t *testing.T) {
 	tests := []struct {
 		name string
-		arg  *Config
+		arg  *setup.Cfg
 	}{
 		// TODO: Add test cases.
 	}
@@ -24,14 +26,14 @@ func Test_logger(t *testing.T) {
 			addr := strings.Split(l.Addr().String(), ":")
 			l.Close()
 
-			c := &Config{
-				port:     addr[1],
-				logger:   &lumberjack.Logger{},
-				protocol: "tcp",
-				address:  addr[0],
+			c := &setup.Cfg{
+				Port:     addr[1],
+				Logger:   &lumberjack.Logger{},
+				Protocol: "tcp",
+				Address:  addr[0],
 			}
 
-			logger(c)
+			Run(c)
 		})
 	}
 }
