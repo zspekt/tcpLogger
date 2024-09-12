@@ -25,6 +25,9 @@ func Test_logger(t *testing.T) {
 		wantBytes     []byte
 		shutdownDelay time.Duration
 		signal        syscall.Signal
+		//
+		lineStop    int
+		lineStopSig chan struct{}
 	}{
 		{
 			name: "succesfully logging text3. ending with SIGINT",
@@ -45,6 +48,8 @@ func Test_logger(t *testing.T) {
 			wantBytes:     text3,
 			shutdownDelay: 1000 * time.Millisecond,
 			signal:        syscall.SIGINT,
+			lineStop:      5,
+			lineStopSig:   make(chan struct{}),
 		},
 		{
 			name: "succesfully logging text4. ending with SIGINT",
@@ -65,6 +70,8 @@ func Test_logger(t *testing.T) {
 			wantBytes:     text4,
 			shutdownDelay: 1000 * time.Millisecond,
 			signal:        syscall.SIGINT,
+			lineStop:      7,
+			lineStopSig:   make(chan struct{}),
 		},
 	}
 	for _, tt := range tests {
@@ -86,17 +93,42 @@ func Test_logger(t *testing.T) {
 				syscall.Kill(syscall.Getpid(), tt.signal)
 			}()
 
-			// go dialAndWrite(t, tt.bytes, addr[0]+":"+addr[1], 0, true)
+			go dialAndWrite(t, tt.bytes, addr[0]+":"+addr[1], 0, true)
 
-			go func(
-				t *testing.T,
-				b []byte,
-				addr string,
-				closingDelay time.Duration,
-				shouldClose bool,
-			) {
+			Run(tt.arg)
+
+			got, err := os.ReadFile(tt.arg.Logger.Filename)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				os.Remove(tt.arg.Logger.Filename)
+			})
+
+			if !bytes.Equal(got, tt.wantBytes) {
+				t.Errorf("got:\n<<%v>>\nwant:\n<<%v>>", string(got), string(tt.wantBytes))
+			}
+		})
+
+		t.Run("stopping mid exec:"+tt.name, func(t *testing.T) {
+			l, err := net.Listen("tcp", "localhost:0") // just doing this to get an available port
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			addr := strings.Split(l.Addr().String(), ":")
+			l.Close()
+			tt.arg.Address = addr[0]
+			tt.arg.Port = addr[1]
+
+			go func() {
+				<-tt.lineStopSig
+				time.Sleep(50 * time.Millisecond)
+				syscall.Kill(syscall.Getpid(), tt.signal)
+			}()
+
+			go func(t *testing.T, b []byte, addr string) {
 				t.Helper()
-				time.Sleep(100 * time.Millisecond)
 				defer slog.Info("dialAndWrite has exited.")
 
 				var (
@@ -110,14 +142,7 @@ func Test_logger(t *testing.T) {
 				}
 				slog.Info("dialAndWrite(): stablished tcp conn")
 
-				if shouldClose {
-					defer func() {
-						time.Sleep(closingDelay)
-						conn.Close()
-					}()
-				}
-
-				for {
+				for i := 0; i < tt.lineStop; i++ {
 					msg, err := r.ReadBytes('\n')
 					if err != nil {
 						if err == io.EOF {
@@ -133,8 +158,12 @@ func Test_logger(t *testing.T) {
 					}
 					conn.Write(msg)
 				}
-				time.Sleep(8 * time.Second)
-			}(t, tt.bytes, addr[0]+":"+addr[1], 1*time.Second, false)
+				tt.lineStopSig <- struct{}{}
+			}(
+				t,
+				tt.bytes,
+				addr[0]+":"+addr[1],
+			)
 
 			Run(tt.arg)
 
@@ -146,8 +175,13 @@ func Test_logger(t *testing.T) {
 				os.Remove(tt.arg.Logger.Filename)
 			})
 
-			if !bytes.Equal(got, tt.wantBytes) {
-				t.Errorf("got:\n%v\nwant:\n%v", string(got), string(tt.wantBytes))
+			split := bytes.Split(tt.bytes, []byte("\n"))[:tt.lineStop]
+
+			// we add a newline at the end since that's the format we want
+			want := append(bytes.Join(split, []byte("\n")), '\n')
+
+			if !bytes.Equal(got, want) {
+				t.Errorf("got:\n<<%v>>\nwant:\n<<%v>>", string(got), string(want))
 			}
 		})
 	}
