@@ -450,6 +450,7 @@ func TestAcceptWithTimeout(t *testing.T) {
 	type args struct {
 		l net.Listener
 		d time.Duration
+		c chan struct{}
 	}
 	tests := []struct {
 		name    string
@@ -463,6 +464,7 @@ func TestAcceptWithTimeout(t *testing.T) {
 			args: args{
 				l: nil,
 				d: 500 * time.Millisecond,
+				c: make(chan struct{}),
 			},
 			want:    nil,
 			wantErr: nil,
@@ -473,6 +475,7 @@ func TestAcceptWithTimeout(t *testing.T) {
 			args: args{
 				l: nil,
 				d: 250 * time.Millisecond,
+				c: make(chan struct{}),
 			},
 			want:    nil,
 			wantErr: NetTimeoutError,
@@ -508,7 +511,7 @@ func TestAcceptWithTimeout(t *testing.T) {
 					return
 				}
 			}()
-			got, err := AcceptWithTimeout(tt.args.l, tt.args.d)
+			got, err := AcceptWithTimeout(tt.args.l, tt.args.d, tt.args.c)
 
 			if err != tt.wantErr {
 				t.Errorf("AcceptWithTimeout() error = %v, wantErr %v", err, tt.wantErr)

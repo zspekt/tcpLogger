@@ -26,8 +26,12 @@ func Test_logger(t *testing.T) {
 		shutdownDelay time.Duration
 		signal        syscall.Signal
 		//
-		lineStop    int
-		lineStopSig chan struct{}
+		lineStop     int
+		lineStopSig  chan struct{}
+		midPointStop int
+		midPointSig  chan struct{}
+		continueSig  chan struct{}
+		shutdownSig  chan struct{}
 	}{
 		{
 			name: "succesfully logging text3. ending with SIGINT",
@@ -50,6 +54,10 @@ func Test_logger(t *testing.T) {
 			signal:        syscall.SIGINT,
 			lineStop:      5,
 			lineStopSig:   make(chan struct{}),
+			midPointStop:  5,
+			midPointSig:   make(chan struct{}),
+			continueSig:   make(chan struct{}),
+			shutdownSig:   make(chan struct{}),
 		},
 		{
 			name: "succesfully logging text4. ending with SIGINT",
@@ -72,6 +80,10 @@ func Test_logger(t *testing.T) {
 			signal:        syscall.SIGINT,
 			lineStop:      7,
 			lineStopSig:   make(chan struct{}),
+			midPointStop:  10,
+			midPointSig:   make(chan struct{}),
+			continueSig:   make(chan struct{}),
+			shutdownSig:   make(chan struct{}),
 		},
 	}
 	for _, tt := range tests {
@@ -182,6 +194,129 @@ func Test_logger(t *testing.T) {
 
 			if !bytes.Equal(got, want) {
 				t.Errorf("got:\n<<%v>>\nwant:\n<<%v>>", string(got), string(want))
+			}
+		})
+
+		t.Run("cutting conn then restablishing"+":"+tt.name, func(t *testing.T) {
+			l, err := net.Listen("tcp", "localhost:0") // just doing this to get an available port
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			addr := strings.Split(l.Addr().String(), ":")
+			l.Close()
+			tt.arg.Address = addr[0]
+			tt.arg.Port = addr[1]
+
+			go func() {
+				<-tt.shutdownSig
+				slog.Info("test gofunc got shutdownSig")
+				time.Sleep(50 * time.Millisecond)
+				syscall.Kill(syscall.Getpid(), tt.signal)
+			}()
+
+			go func(t *testing.T, b []byte, addr string) {
+				t.Helper()
+				defer func() {
+					tt.shutdownSig <- struct{}{}
+					slog.Info("dialAndWrite has exited.")
+				}()
+
+				var (
+					proto = "tcp"
+					r     = bufio.NewReader(bytes.NewReader(b))
+				)
+
+				conn, err := net.Dial(proto, addr)
+				if err != nil {
+					t.Fatal(err)
+					return
+				}
+				slog.Info("dialAndWrite(): established tcp conn")
+
+				for i := 0; i < tt.midPointStop; i++ {
+					msg, err := r.ReadBytes('\n')
+					if err != nil {
+						if err == io.EOF {
+							slog.Info("reached EOF. checking byte slice...")
+							if len(msg) == 0 {
+								slog.Info("nothing left in byte slice after EOF. breaking")
+								break
+							}
+							conn.Write(msg)
+							break
+						}
+						t.Fatal(err)
+					}
+					conn.Write(msg)
+				}
+				slog.Info("dial and write has reached mid point. closing conn...")
+				conn.Close()
+
+				tt.midPointSig <- struct{}{}
+				<-tt.continueSig
+				slog.Info("dialAndWrite got continue sig...")
+
+				conn, err = net.Dial(proto, addr)
+				if err != nil {
+					t.Fatal(err)
+				}
+				slog.Info("dialAndWrite managed to stablish conn again")
+
+				for {
+					msg, err := r.ReadBytes('\n')
+					if err != nil {
+						if err == io.EOF {
+							slog.Info("reached EOF. checking byte slice...")
+							if len(msg) == 0 {
+								slog.Info("nothing left in byte slice after EOF. breaking")
+								break
+							}
+							conn.Write(msg)
+							break
+						}
+						t.Fatal(err)
+					}
+					conn.Write(msg)
+				}
+			}(
+				t,
+				tt.bytes,
+				addr[0]+":"+addr[1],
+			)
+
+			go func() {
+				split := bytes.Split(tt.bytes, []byte("\n"))[:tt.midPointStop]
+				// we add a newline at the end since that's the format we wantMid
+				wantMid := append(bytes.Join(split, []byte("\n")), '\n')
+
+				<-tt.midPointSig
+				time.Sleep(100 * time.Millisecond) // file won't be there if we don't wait
+				got, err := os.ReadFile(tt.arg.Logger.Filename)
+				if err != nil {
+					slog.Error("error checking file midpoint", "error", err)
+					t.Fatal(err)
+				}
+				if !bytes.Equal(got, wantMid) {
+					t.Errorf("mid point got:\n<<%v>>\nwant:\n<<%v>>", string(got), string(wantMid))
+				}
+				tt.continueSig <- struct{}{}
+			}()
+
+			Run(tt.arg)
+
+			got, err := os.ReadFile(tt.arg.Logger.Filename)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				os.Remove(tt.arg.Logger.Filename)
+			})
+
+			wantFull := tt.bytes
+
+			if !bytes.Equal(got, wantFull) {
+				t.Errorf("got:\n<<%v>>\nwant:\n<<%v>>", string(got), string(wantFull))
 			}
 		})
 	}

@@ -46,10 +46,7 @@ func handleConn(conn net.Conn, ch chan<- []byte, shutdwn <-chan struct{}) {
 					continue // we continue so we can try to read again. maybe incremental backoff?
 				}
 				slog.Error( // if we get here, something went wrong :0
-					"error reading bytes from conn reader. finishing loop...",
-					"error",
-					err,
-				)
+					"error reading bytes from conn reader. finishing loop...", "error", err)
 			}
 			if len(msg) > 0 {
 				ch <- msg
@@ -121,7 +118,7 @@ func ReadBytesWithTimeout(r BytesReader, delim byte, d time.Duration) ([]byte, e
 // AcceptWithTimeout is a wrapper around the Accept() method of net.Listener
 // that will return a net.OpError if the timeout is reached before a connection
 // is accepted. Otherwise, returns conn, nil
-func AcceptWithTimeout(l net.Listener, d time.Duration) (net.Conn, error) {
+func AcceptWithTimeout(l net.Listener, d time.Duration, shutdwn chan struct{}) (net.Conn, error) {
 	var (
 		conn net.Conn
 		err  error
@@ -141,6 +138,10 @@ func AcceptWithTimeout(l net.Listener, d time.Duration) (net.Conn, error) {
 				return nil, err
 			}
 			return conn, nil
+		case <-shutdwn:
+			shutdwn <- struct{}{}
+			slog.Info("AcceptWithTimeout(): caught shutdown signal while waiting for conn")
+			return nil, errors.New("shutdown sig while waiting for conn")
 		}
 	}
 }

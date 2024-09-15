@@ -53,7 +53,7 @@ func Run(c *setup.Cfg) {
 			return
 		default:
 			slog.Info("logger(): running default case on main for select loop...")
-			conn, err = AcceptWithTimeout(listener, 9*time.Second)
+			conn, err = AcceptWithTimeout(listener, 60*time.Second, shutdwn)
 			if err != nil {
 				slog.Error("logger(): error accepting connection", "error", err)
 				continue
