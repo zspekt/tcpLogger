@@ -2,7 +2,7 @@
 package logger
 
 import (
-	"fmt"
+	"context"
 	"log/slog"
 	"net"
 	"os"
@@ -12,16 +12,15 @@ import (
 )
 
 func Run(c *setup.Cfg) {
-	ch := make(chan []byte, 5)
-	logger := c.Logger
-	defer logger.Close()
-	go log(ch, logger)
+	ctx, cancel := context.WithCancel(context.Background())
 
 	sigs := make(chan os.Signal, 1)
-	stopAcceptConn := make(chan struct{}, 1)
-	stopLoggerRun := make(chan struct{}, 1)
-	stopHandleConn := make(chan struct{}, 1)
-	go shutdown(stopLoggerRun, stopHandleConn, stopAcceptConn, sigs)
+	go shutdownWithCtx(sigs, cancel)
+
+	logger := c.Logger
+	defer logger.Close()
+	ch := make(chan []byte, 5)
+	go logWithCtx(ch, logger, ctx)
 
 	listener, err := net.Listen(c.Protocol, c.Address+":"+c.Port)
 	if err != nil {
@@ -34,8 +33,8 @@ func Run(c *setup.Cfg) {
 	for {
 		slog.Info("logger(): running main for loop...")
 		select {
-		case s := <-stopLoggerRun:
-			slog.Info(fmt.Sprintf("logger(): received %v signal...", s))
+		case <-ctx.Done():
+			slog.Info("RunWithCtx(): received cancel sig...")
 			if conn != nil {
 				slog.Info("logger(): closing current connection...")
 				err := conn.Close()
@@ -56,13 +55,13 @@ func Run(c *setup.Cfg) {
 			slog.Info("logger(): running default case on main for select loop...")
 			// replace with AcceptWithShutdown() probably
 			// conn, err = AcceptWithTimeout(listener, 60*time.Second, shutdwn)
-			conn, err = AcceptWithShutdown(listener, stopAcceptConn)
+			conn, err = AcceptWithCtx(listener, ctx)
 			if err != nil {
 				slog.Error("logger(): error accepting connection", "error", err)
 				continue
 			}
 			slog.Info("logger(): accepted connection without error")
-			handleConn(conn, ch, stopHandleConn)
+			handleConnWithCtx(conn, ch, ctx)
 		}
 	}
 }
