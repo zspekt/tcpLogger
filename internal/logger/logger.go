@@ -1,3 +1,4 @@
+// TODO: replace 46 gazillion channels with a single ctx ?
 package logger
 
 import (
@@ -5,7 +6,6 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"time"
 
 	"github.com/zspekt/tcpLogger/internal/setup"
 	"github.com/zspekt/tcpLogger/internal/utils"
@@ -18,9 +18,10 @@ func Run(c *setup.Cfg) {
 	go log(ch, logger)
 
 	sigs := make(chan os.Signal, 1)
-	shutdwn := make(chan struct{}, 1)
+	stopAcceptConn := make(chan struct{}, 1)
+	stopLoggerRun := make(chan struct{}, 1)
 	stopHandleConn := make(chan struct{}, 1)
-	go shutdown(shutdwn, stopHandleConn, sigs)
+	go shutdown(stopLoggerRun, stopHandleConn, stopAcceptConn, sigs)
 
 	listener, err := net.Listen(c.Protocol, c.Address+":"+c.Port)
 	if err != nil {
@@ -33,7 +34,7 @@ func Run(c *setup.Cfg) {
 	for {
 		slog.Info("logger(): running main for loop...")
 		select {
-		case s := <-shutdwn:
+		case s := <-stopLoggerRun:
 			slog.Info(fmt.Sprintf("logger(): received %v signal...", s))
 			if conn != nil {
 				slog.Info("logger(): closing current connection...")
@@ -53,7 +54,9 @@ func Run(c *setup.Cfg) {
 			return
 		default:
 			slog.Info("logger(): running default case on main for select loop...")
-			conn, err = AcceptWithTimeout(listener, 60*time.Second, shutdwn)
+			// replace with AcceptWithShutdown() probably
+			// conn, err = AcceptWithTimeout(listener, 60*time.Second, shutdwn)
+			conn, err = AcceptWithShutdown(listener, stopAcceptConn)
 			if err != nil {
 				slog.Error("logger(): error accepting connection", "error", err)
 				continue

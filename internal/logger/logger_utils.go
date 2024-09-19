@@ -19,38 +19,38 @@ type BytesReader interface {
 	ReadBytes(byte) ([]byte, error)
 }
 
+var shutdownErr error = errors.New("got shutdown signal")
+
 func handleConn(conn net.Conn, ch chan<- []byte, shutdwn <-chan struct{}) {
 	slog.Info("handling connection...")
 	defer conn.Close()
 
 	reader := bufio.NewReader(conn)
 	for {
-		select {
-		case <-shutdwn:
-			slog.Info("handleConn received shutdown signal. returning...")
-			return
-		default:
-			msg, err := ReadBytesWithTimeout(reader, '\n', 3*time.Second)
-			if err != nil {
-				if errors.Is(err, io.EOF) {
-					slog.Error(
-						"EOF while reading from net.Conn reader (conn closed?). returning",
-					)
-					return
-					// continue this doesn't make sense wtf // we continue so we can (probably) handle the shutdown case.
-				}
-				if errors.Is(err, ReadTimeoutError) {
-					slog.Error(
-						"timeout waiting to read from conn",
-					)
-					continue // we continue so we can try to read again. maybe incremental backoff?
-				}
-				slog.Error( // if we get here, something went wrong :0
-					"error reading bytes from conn reader. finishing loop...", "error", err)
+		// select {
+		// case <-shutdwn:
+		// 	slog.Info("handleConn received shutdown signal. returning...")
+		// 	return
+		// default:
+		msg, err := ReadBytesWithShutdown(reader, '\n', shutdwn)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				slog.Error(
+					"EOF while reading from net.Conn reader (conn closed?). returning",
+				)
+				return
+				// continue this doesn't make sense wtf // we continue so we can (probably) handle the shutdown case.
 			}
-			if len(msg) > 0 {
-				ch <- msg
+			if errors.Is(err, shutdownErr) {
+				slog.Info("handleConn(): caught shutdownErr from ReadBytesWithShutdown()")
+				return
+				// continue this doesn't make sense wtf // we continue so we can (probably) handle the shutdown case.
 			}
+			slog.Error( // if we get here, something went wrong :0
+				"error reading bytes from conn reader. finishing loop...", "error", err)
+		}
+		if len(msg) > 0 {
+			ch <- msg
 		}
 	}
 }
@@ -72,12 +72,17 @@ func log(ch <-chan []byte, logger *lumberjack.Logger) {
 	}
 }
 
-func shutdown(stopLoggerLoop, stopHandleConn chan struct{}, sigs chan os.Signal) {
+func shutdown(
+	stopLoggerLoop, stopHandleConn chan struct{},
+	stopAcceptConn chan struct{},
+	sigs chan os.Signal,
+) {
 	// we register the channel so it will get these sigs
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	s := <-sigs
 	slog.Info("before sending to shutdown") // we get here
 	stopLoggerLoop <- struct{}{}
+	stopAcceptConn <- struct{}{}
 	stopHandleConn <- struct{}{}
 	slog.Info(
 		fmt.Sprintf(
@@ -86,6 +91,33 @@ func shutdown(stopLoggerLoop, stopHandleConn chan struct{}, sigs chan os.Signal)
 		),
 	) // and after changing the channel buffer size from 0 to 1, we get here
 	// however, we never get to the case <- shutdwn
+}
+
+func ReadBytesWithShutdown(r BytesReader, delim byte, shutdown <-chan struct{}) ([]byte, error) {
+	ch := make(chan struct{})
+	var (
+		bb  []byte
+		err error
+	)
+	go func() {
+		bb, err = r.ReadBytes('\n')
+		ch <- struct{}{}
+	}()
+
+	for {
+		select {
+		case <-shutdown:
+			slog.Info("ReadBytesWithShutdown(): got shutdown signal. returning...")
+			return nil, errors.New("got shutdown signal")
+		case <-ch:
+			slog.Info("Successfully reading from conn")
+			if len(bb) == 0 {
+				slog.Error("successfully read MY ASS. this byte slice is empty")
+				return nil, err
+			}
+			return bb, err
+		}
+	}
 }
 
 func ReadBytesWithTimeout(r BytesReader, delim byte, d time.Duration) ([]byte, error) {
@@ -142,6 +174,32 @@ func AcceptWithTimeout(l net.Listener, d time.Duration, shutdwn chan struct{}) (
 			shutdwn <- struct{}{}
 			slog.Info("AcceptWithTimeout(): caught shutdown signal while waiting for conn")
 			return nil, errors.New("shutdown sig while waiting for conn")
+		}
+	}
+}
+
+func AcceptWithShutdown(l net.Listener, shutdwn chan struct{}) (net.Conn, error) {
+	var (
+		conn net.Conn
+		err  error
+	)
+
+	ch := make(chan struct{}, 1)
+	go func() {
+		conn, err = l.Accept()
+		ch <- struct{}{}
+	}()
+	for {
+		select {
+		case <-ch:
+			if err != nil {
+				return nil, err
+			}
+			return conn, nil
+		case <-shutdwn:
+			shutdwn <- struct{}{}
+			slog.Info("AcceptWithTimeout(): caught shutdown signal while waiting for conn")
+			return nil, shutdownErr
 		}
 	}
 }
