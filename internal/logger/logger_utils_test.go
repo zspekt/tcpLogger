@@ -10,22 +10,24 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-//	type delayedReader struct {
-//		r *bufio.Reader
-//		d time.Duration
-//	}
-//
-// // only for use in testing
-//
-//	func (r *delayedReader) ReadBytes(delim byte) ([]byte, error) {
-//		time.Sleep(r.d)
-//		b, err := r.r.ReadBytes(delim)
-//		return b, err
-//	}
+type delayedReader struct {
+	r *bufio.Reader
+	d time.Duration
+}
+
+// only for use in testing
+
+// func (r *delayedReader) ReadBytes(delim byte) ([]byte, error) {
+// 	time.Sleep(r.d)
+// 	b, err := r.r.ReadBytes(delim)
+// 	return b, err
+// }
+
 //
 //	func Test_handleConn(t *testing.T) {
 //		type args struct {
@@ -357,19 +359,16 @@ func Test_shutdown(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.ctx, tt.args.cancel = context.WithCancel(context.Background())
 			wg := &sync.WaitGroup{}
+			wg.Add(1)
 			go func() {
-				wg.Add(1)
-				for {
-					select {
-					case <-tt.ctx.Done():
-						wg.Done()
-					}
-				}
+				<-tt.ctx.Done()
+				wg.Done()
 			}()
 
 			go shutdown(tt.args.sigs, tt.args.cancel)
 
 			go func() {
+				time.Sleep(5 * time.Millisecond) // to make sure our goroutine catches it
 				syscall.Kill(syscall.Getpid(), tt.signal.(syscall.Signal))
 			}()
 
@@ -381,75 +380,76 @@ func Test_shutdown(t *testing.T) {
 	}
 }
 
-// func TestReadBytesWithTimeout(t *testing.T) {
-// 	type args struct {
-// 		r     BytesReader
-// 		delim byte
-// 		d     time.Duration
-// 	}
-// 	tests := []struct {
-// 		name        string
-// 		args        args
-// 		want        []byte
-// 		wantErr     error
-// 		bytes       []byte
-// 		readerDelay time.Duration
-// 	}{
-// 		{
-// 			name:        "will timeout",
-// 			args:        args{r: nil, delim: '\n', d: 250 * time.Millisecond},
-// 			want:        nil,
-// 			wantErr:     ReadTimeoutError,
-// 			bytes:       text1,
-// 			readerDelay: 500 * time.Millisecond,
-// 		},
-// 		{
-// 			name:        "reading from text1 reader. shouldn't time out",
-// 			args:        args{r: nil, delim: '\n', d: 500 * time.Millisecond},
-// 			want:        []byte("Lorem ipsum dolor sit amet, consectetuer adipiscing elit.\n"),
-// 			wantErr:     nil,
-// 			bytes:       text1,
-// 			readerDelay: 250 * time.Millisecond,
-// 		},
-// 		{
-// 			name:        "reading from text2 reader. shouldn't time out",
-// 			args:        args{r: nil, delim: '\n', d: 500 * time.Millisecond},
-// 			want:        []byte("Lorem TEXT2 dolor sit amet, consectetuer adipiscing elit.\n"),
-// 			wantErr:     nil,
-// 			bytes:       text2,
-// 			readerDelay: 250 * time.Millisecond,
-// 		},
-// 	}
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			r := bytes.NewReader(tt.bytes)
-// 			bufioReader := bufio.NewReader(r)
-//
-// 			tt.args.r = &delayedReader{
-// 				r: bufioReader,
-// 				d: tt.readerDelay,
-// 			}
-//
-// 			got, err := ReadBytesWithTimeout(tt.args.r, tt.args.delim, tt.args.d)
-//
-// 			if err != tt.wantErr {
-// 				slog.Error("ERROR AREN'T EQUAL")
-// 				t.Errorf("ReadBytesWithTimeout() got error %v. want error %v", err, tt.wantErr)
-// 				return
-// 			}
-//
-// 			if !bytes.Equal(got, tt.want) {
-// 				slog.Error("BYTE SLICES AREN'T EQUAL")
-// 				t.Errorf(
-// 					"ReadBytesWithTimeout() got bytes %v. want bytes %v",
-// 					string(got),
-// 					string(tt.want),
-// 				)
-// 				return
-// 			}
-// 		})
-// 	}
-// }
+func TestReadBytesWithCtx(t *testing.T) {
+	type args struct {
+		r     BytesReader
+		delim byte
+		ctx   context.Context
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    []byte
+		wantErr error
+		bytes   []byte
+		cancel  context.CancelFunc
+	}{
+		{
+			name:    "reading from text1 reader",
+			args:    args{r: nil, delim: '\n', ctx: nil},
+			want:    []byte("Lorem ipsum dolor sit amet, consectetuer adipiscing elit.\n"),
+			wantErr: nil,
+			bytes:   text1,
+			cancel:  nil,
+		},
+		{
+			name:    "reading from text2 reader",
+			args:    args{r: nil, delim: '\n', ctx: nil},
+			want:    []byte("Lorem TEXT2 dolor sit amet, consectetuer adipiscing elit.\n"),
+			wantErr: nil,
+			bytes:   text2,
+			cancel:  nil,
+		},
+		{
+			name:    "int before anything can get done",
+			args:    args{r: nil, delim: '\n', ctx: nil},
+			want:    []byte(""),
+			wantErr: shutdownErr,
+			bytes:   text2,
+			cancel:  nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.args.r = bufio.NewReader(bytes.NewReader(tt.bytes))
+
+			tt.args.ctx, tt.cancel = context.WithCancel(context.Background())
+
+			if tt.wantErr == shutdownErr {
+				tt.cancel()
+			}
+
+			got, err := ReadBytesWithCtx(tt.args.r, tt.args.delim, tt.args.ctx)
+
+			if err != tt.wantErr {
+				slog.Error("ERROR AREN'T EQUAL")
+				t.Errorf("ReadBytesWithCtx() got error %v. want error %v", err, tt.wantErr)
+				return
+			}
+
+			if !bytes.Equal(got, tt.want) {
+				slog.Error("BYTE SLICES AREN'T EQUAL")
+				t.Errorf(
+					"ReadBytesWithCtx() got bytes %v. want bytes %v",
+					string(got),
+					string(tt.want),
+				)
+				return
+			}
+		})
+	}
+}
+
 //
 // // here we really are only testing the timeout
 // func TestAcceptWithTimeout(t *testing.T) {
