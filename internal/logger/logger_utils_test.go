@@ -7,6 +7,8 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"sync"
+	"syscall"
 	"testing"
 
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -193,7 +195,8 @@ import (
 //			conn.Write(msg)
 //		}
 //	}
-func Test_log(t *testing.T) {
+
+func Test_logWithCtx(t *testing.T) {
 	type args struct {
 		ch     chan []byte
 		logger *lumberjack.Logger
@@ -320,68 +323,64 @@ func Test_log(t *testing.T) {
 	}
 }
 
-// func Test_shutdown(t *testing.T) {
-// 	type args struct {
-// 		stopLoggerLoop chan struct{}
-// 		stopHandleConn chan struct{}
-// 		sigs           chan os.Signal
-// 	}
-// 	tests := []struct {
-// 		name   string
-// 		args   args
-// 		signal os.Signal
-// 	}{
-// 		{
-// 			name: "sending SIGINT",
-// 			args: args{
-// 				stopLoggerLoop: make(chan struct{}, 1),
-// 				stopHandleConn: make(chan struct{}, 1),
-// 				sigs:           make(chan os.Signal, 1),
-// 			},
-// 			signal: syscall.SIGINT,
-// 		},
-// 		{
-// 			name: "sending SIGTERM",
-// 			args: args{
-// 				stopLoggerLoop: make(chan struct{}, 1),
-// 				stopHandleConn: make(chan struct{}, 1),
-// 				sigs:           make(chan os.Signal, 1),
-// 			},
-// 			signal: syscall.SIGTERM,
-// 		},
-// 	}
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			wg := &sync.WaitGroup{}
-// 			go func() {
-// 				wg.Add(2)
-// 				for {
-// 					select {
-// 					case <-tt.args.stopHandleConn:
-// 						slog.Info("Test_shutdown: stopHandleConn channel got signal")
-// 						wg.Done()
-// 					case <-tt.args.stopLoggerLoop:
-// 						slog.Info("Test_shutdown: stopLoggerLoop channel got signal")
-// 						wg.Done()
-// 					}
-// 				}
-// 			}()
-//
-// 			go func() {
-// 				time.Sleep(500 * time.Millisecond)
-// 				syscall.Kill(syscall.Getpid(), tt.signal.(syscall.Signal))
-// 				// tt.args.sigs <- tt.signal
-// 			}()
-//
-// 			shutdown(tt.args.stopLoggerLoop, tt.args.stopHandleConn, tt.args.sigs)
-// 			// if we get here, shutdown has exited, which means it caught the int/term
-// 			// signal
-// 			wg.Wait()
-// 			slog.Info("both channels received shutdown signal and shutdown func has returned")
-// 		})
-// 	}
-// }
-//
+func Test_shutdown(t *testing.T) {
+	type args struct {
+		sigs   chan os.Signal
+		cancel context.CancelFunc
+	}
+	tests := []struct {
+		name   string
+		args   args
+		signal os.Signal
+		ctx    context.Context
+	}{
+		{
+			name: "sending SIGINT",
+			args: args{
+				sigs:   make(chan os.Signal, 1),
+				cancel: nil,
+			},
+			signal: syscall.SIGINT,
+			ctx:    nil,
+		},
+		{
+			name: "sending SIGTERM",
+			args: args{
+				sigs:   make(chan os.Signal, 1),
+				cancel: nil,
+			},
+			signal: syscall.SIGTERM,
+			ctx:    nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.ctx, tt.args.cancel = context.WithCancel(context.Background())
+			wg := &sync.WaitGroup{}
+			go func() {
+				wg.Add(1)
+				for {
+					select {
+					case <-tt.ctx.Done():
+						wg.Done()
+					}
+				}
+			}()
+
+			go shutdown(tt.args.sigs, tt.args.cancel)
+
+			go func() {
+				syscall.Kill(syscall.Getpid(), tt.signal.(syscall.Signal))
+			}()
+
+			// if we get here, shutdown has exited, which means it caught the int/term
+			// signal
+			wg.Wait()
+			slog.Info("both channels received shutdown signal and shutdown func has returned")
+		})
+	}
+}
+
 // func TestReadBytesWithTimeout(t *testing.T) {
 // 	type args struct {
 // 		r     BytesReader
