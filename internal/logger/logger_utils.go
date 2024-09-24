@@ -85,7 +85,7 @@ func logWithCtx(ch <-chan []byte, logger *lumberjack.Logger, ctx context.Context
 	}
 }
 
-func shutdownWithCtx(sigs chan os.Signal, cancel context.CancelFunc) {
+func shutdown(sigs chan os.Signal, cancel context.CancelFunc) {
 	// we register the channel so it will get these sigs
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	s := <-sigs

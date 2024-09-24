@@ -15,7 +15,7 @@ func Run(c *setup.Cfg) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	sigs := make(chan os.Signal, 1)
-	go shutdownWithCtx(sigs, cancel)
+	go shutdown(sigs, cancel)
 
 	logger := c.Logger
 	defer logger.Close()
