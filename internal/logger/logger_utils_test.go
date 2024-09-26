@@ -172,7 +172,8 @@ func dialAndWrite(
 	)
 	conn, err := net.Dial(proto, addr)
 	if err != nil {
-		t.Fatal(err)
+		slog.Error("failing from dialAndWrite()", "error", err)
+		t.Fail()
 		return
 	}
 	slog.Info("dialAndWrite(): stablished tcp conn")
@@ -196,7 +197,9 @@ func dialAndWrite(
 				conn.Write(msg)
 				break
 			}
-			t.Fatal(err)
+			slog.Error("failing from dialAndWrite()", "error", err)
+			t.Fail()
+			return
 		}
 		conn.Write(msg)
 	}

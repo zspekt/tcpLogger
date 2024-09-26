@@ -149,7 +149,8 @@ func Test_logger(t *testing.T) {
 				)
 				conn, err := net.Dial(proto, addr)
 				if err != nil {
-					t.Fatal(err)
+					slog.Error("failing from anon go func()", "error", err)
+					t.Fail()
 					return
 				}
 				slog.Info("dialAndWrite(): stablished tcp conn")
@@ -166,7 +167,9 @@ func Test_logger(t *testing.T) {
 							conn.Write(msg)
 							break
 						}
-						t.Fatal(err)
+						slog.Error("failing from anon go func()", "error", err)
+						t.Fail()
+						return
 					}
 					conn.Write(msg)
 				}
@@ -229,7 +232,8 @@ func Test_logger(t *testing.T) {
 
 				conn, err := net.Dial(proto, addr)
 				if err != nil {
-					t.Fatal(err)
+					slog.Error("failing from anon go func()", "error", err)
+					t.Fail()
 					return
 				}
 				slog.Info("dialAndWrite(): established tcp conn")
@@ -246,7 +250,9 @@ func Test_logger(t *testing.T) {
 							conn.Write(msg)
 							break
 						}
-						t.Fatal(err)
+						slog.Error("failing from anon go func()", "error", err)
+						t.Fail()
+						return
 					}
 					conn.Write(msg)
 				}
@@ -259,7 +265,9 @@ func Test_logger(t *testing.T) {
 
 				conn, err = net.Dial(proto, addr)
 				if err != nil {
-					t.Fatal(err)
+					slog.Error("failing from dialAndWrite()", "error", err)
+					t.Fail()
+					return
 				}
 				slog.Info("dialAndWrite managed to stablish conn again")
 
@@ -275,7 +283,9 @@ func Test_logger(t *testing.T) {
 							conn.Write(msg)
 							break
 						}
-						t.Fatal(err)
+						slog.Error("failing from anon go func()", "error", err)
+						t.Fail()
+						return
 					}
 					conn.Write(msg)
 				}
@@ -294,8 +304,13 @@ func Test_logger(t *testing.T) {
 				time.Sleep(40 * time.Millisecond) // file won't be there if we don't wait
 				got, err := os.ReadFile(tt.arg.Logger.Filename)
 				if err != nil {
-					slog.Error("error checking file midpoint", "error", err)
-					t.Fatal(err)
+					slog.Error(
+						"error checking file midpoint. failing from anon go func()",
+						"error",
+						err,
+					)
+					t.Fail()
+					return
 				}
 				if !bytes.Equal(got, wantMid) {
 					t.Errorf("mid point got:\n<<%v>>\nwant:\n<<%v>>", string(got), string(wantMid))
