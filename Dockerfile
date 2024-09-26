@@ -8,12 +8,10 @@ RUN go mod download
 RUN go vet -v ./...
 RUN go test -v ./...
 
-RUN go build -o ./tcplogger
+RUN go build -o ./tcplogger cmd/tcplogger/main.go
 
-FROM gcr.io/distroless/static-debian12
+FROM gcr.io/distroless/base-nossl-debian12
 
 COPY --from=builder /build/tcplogger /
 
 CMD ["/tcplogger"]
-
-
