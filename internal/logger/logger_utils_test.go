@@ -6,6 +6,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"net"
 	"os"
 	"sync"
 	"syscall"
@@ -450,89 +451,86 @@ func TestReadBytesWithCtx(t *testing.T) {
 	}
 }
 
-//
-// // here we really are only testing the timeout
-// func TestAcceptWithTimeout(t *testing.T) {
-// 	type args struct {
-// 		l net.Listener
-// 		d time.Duration
-// 		c chan struct{}
-// 	}
-// 	tests := []struct {
-// 		name    string
-// 		args    args
-// 		want    net.Conn // can't really test what i GET because tcpconn has unexported fields
-// 		wantErr error
-// 		delay   time.Duration
-// 	}{
-// 		{
-// 			name: "conn is stablished before timeout",
-// 			args: args{
-// 				l: nil,
-// 				d: 500 * time.Millisecond,
-// 				c: make(chan struct{}),
-// 			},
-// 			want:    nil,
-// 			wantErr: nil,
-// 			delay:   250 * time.Millisecond,
-// 		},
-// 		{
-// 			name: "timeout is reached before conn",
-// 			args: args{
-// 				l: nil,
-// 				d: 250 * time.Millisecond,
-// 				c: make(chan struct{}),
-// 			},
-// 			want:    nil,
-// 			wantErr: NetTimeoutError,
-// 			delay:   500 * time.Millisecond,
-// 		},
-// 	}
-//
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			var err error
-//
-// 			defer func() { // cleaning up
-// 				if tt.args.l != nil {
-// 					tt.args.l.Close()
-// 				}
-// 			}()
-//
-// 			tt.args.l, err = net.Listen("tcp", ":0")
-// 			if err != nil {
-// 				t.Error(err)
-// 				return
-// 			}
-// 			addr := tt.args.l.Addr().String()
-//
-// 			go func() {
-// 				if tt.delay > tt.args.d { // if we're supposed to timeout
-// 					return
-// 				}
-// 				time.Sleep(tt.delay)
-// 				_, err := net.Dial("tcp", addr)
-// 				if err != nil {
-// 					t.Errorf("error dialing conn")
-// 					return
-// 				}
-// 			}()
-// 			got, err := AcceptWithTimeout(tt.args.l, tt.args.d, tt.args.c)
-//
-// 			if err != tt.wantErr {
-// 				t.Errorf("AcceptWithTimeout() error = %v, wantErr %v", err, tt.wantErr)
-// 				return
-// 			}
-//
-// 			if tt.wantErr == nil {
-// 				if _, ok := got.(*net.TCPConn); !ok {
-// 					t.Errorf("AcceptWithTimeout() net.TCPConn assertion on got value failed")
-// 					return
-// 				}
-// 			}
-// 		})
-// 	}
-// }
+func TestAcceptWithCtx(t *testing.T) {
+	type args struct {
+		l   net.Listener
+		ctx context.Context
+	}
+	tests := []struct {
+		name           string
+		args           args
+		want           net.Conn // can't really test what i GET because tcpconn has unexported fields
+		wantErr        error
+		connDelay      time.Duration
+		ctxCancelDelay time.Duration
+		cancel         context.CancelFunc
+	}{
+		{
+			name:           "conn is stablished before ctxCancel",
+			args:           args{l: nil, ctx: nil},
+			want:           nil,
+			wantErr:        nil,
+			connDelay:      1 * time.Millisecond,
+			ctxCancelDelay: 3 * time.Millisecond,
+			cancel:         nil,
+		},
+		{
+			name:           "ctxCancel is reached before conn",
+			args:           args{l: nil, ctx: nil},
+			want:           nil,
+			wantErr:        shutdownErr,
+			connDelay:      3 * time.Millisecond,
+			ctxCancelDelay: 1 * time.Millisecond,
+			cancel:         nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var err error
+			tt.args.ctx, tt.cancel = context.WithCancel(context.Background())
+
+			defer func() { // cleaning up
+				if tt.args.l != nil {
+					tt.args.l.Close()
+				}
+			}()
+
+			tt.args.l, err = net.Listen("tcp", ":0")
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			addr := tt.args.l.Addr().String()
+
+			go func() {
+				time.Sleep(tt.connDelay)
+				_, err := net.Dial("tcp", addr)
+				if err != nil {
+					t.Errorf("error dialing conn")
+					return
+				}
+			}()
+			go func() {
+				time.Sleep(tt.ctxCancelDelay)
+				tt.cancel()
+			}()
+			got, err := AcceptWithCtx(tt.args.l, tt.args.ctx)
+
+			if err != tt.wantErr {
+				t.Errorf("AcceptWithCtx() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if tt.wantErr == nil {
+				if _, ok := got.(*net.TCPConn); !ok {
+					t.Errorf("AcceptWithCtx() net.TCPConn assertion on got value failed")
+					return
+				}
+			}
+		})
+	}
+}
 
 var text2 []byte = []byte(`Lorem TEXT2 dolor sit amet, consectetuer adipiscing elit.
 Vestibulum wisi massa, pulvinar vitae, vestibulum id, vestibulum et, erat.
