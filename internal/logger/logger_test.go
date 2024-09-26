@@ -50,7 +50,7 @@ func Test_logger(t *testing.T) {
 			},
 			bytes:         text3,
 			wantBytes:     text3,
-			shutdownDelay: 1000 * time.Millisecond,
+			shutdownDelay: 75 * time.Millisecond,
 			signal:        syscall.SIGINT,
 			lineStop:      5,
 			lineStopSig:   make(chan struct{}),
@@ -76,7 +76,7 @@ func Test_logger(t *testing.T) {
 			},
 			bytes:         text4,
 			wantBytes:     text4,
-			shutdownDelay: 1000 * time.Millisecond,
+			shutdownDelay: 75 * time.Millisecond,
 			signal:        syscall.SIGINT,
 			lineStop:      7,
 			lineStopSig:   make(chan struct{}),
@@ -291,7 +291,7 @@ func Test_logger(t *testing.T) {
 				wantMid := append(bytes.Join(split, []byte("\n")), '\n')
 
 				<-tt.midPointSig
-				time.Sleep(100 * time.Millisecond) // file won't be there if we don't wait
+				time.Sleep(40 * time.Millisecond) // file won't be there if we don't wait
 				got, err := os.ReadFile(tt.arg.Logger.Filename)
 				if err != nil {
 					slog.Error("error checking file midpoint", "error", err)

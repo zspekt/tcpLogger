@@ -510,6 +510,7 @@ func TestAcceptWithCtx(t *testing.T) {
 				time.Sleep(tt.connDelay)
 				_, err := net.Dial("tcp", addr)
 				if err != nil {
+					slog.Error("error dialing conn", "error", err)
 					t.Errorf("error dialing conn")
 					return
 				}
