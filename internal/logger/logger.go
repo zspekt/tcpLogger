@@ -1,4 +1,3 @@
-// TODO: replace 46 gazillion channels with a single ctx ?
 package logger
 
 import (
@@ -12,6 +11,7 @@ import (
 )
 
 func Run(c *setup.Cfg) {
+	slog.Info("logger.Run(): running...")
 	ctx, cancel := context.WithCancel(context.Background())
 
 	sigs := make(chan os.Signal, 1)
@@ -24,43 +24,41 @@ func Run(c *setup.Cfg) {
 
 	listener, err := net.Listen(c.Protocol, c.Address+":"+c.Port)
 	if err != nil {
-		utils.SlogFatal("logger(): fatal error creating listener", "error", err)
+		utils.SlogFatal("logger.Run(): fatal error creating listener", "error", err)
 	}
 	defer listener.Close()
 
 	// declaring it here so we can close it on case <-shutdwn
 	var conn net.Conn
 	for {
-		slog.Info("logger(): running main for loop...")
+		slog.Debug("logger.Run(): running main loop...")
 		select {
 		case <-ctx.Done():
-			slog.Info("RunWithCtx(): received cancel sig...")
+			slog.Info("logger.Run(): received cancel sig...")
 			if conn != nil {
-				slog.Info("logger(): closing current connection...")
+				slog.Info("logger.Run(): closing current connection...")
 				err := conn.Close()
 				if err != nil {
-					slog.Error("logger(): error closing connection", "error", err)
+					slog.Error("logger.Run(): error closing connection", "error", err)
 				}
 			}
-			slog.Info("logger(): closing channel...")
+			slog.Info("logger.Run(): closing channel...")
 			close(ch)
 
-			slog.Info("logger(): closing logger...")
+			slog.Info("logger.Run(): closing logger...")
 			err = logger.Close()
 			if err != nil {
-				slog.Error("logger(): error closing logger", "error", err)
+				slog.Error("logger.Run(): error closing logger", "error", err)
 			}
 			return
 		default:
-			slog.Info("logger(): running default case on main for select loop...")
-			// replace with AcceptWithShutdown() probably
-			// conn, err = AcceptWithTimeout(listener, 60*time.Second, shutdwn)
+			slog.Debug("logger.Run(): running default case on select loop...")
 			conn, err = AcceptWithCtx(listener, ctx)
 			if err != nil {
-				slog.Error("logger(): error accepting connection", "error", err)
+				slog.Error("logger.Run(): error accepting connection", "error", err)
 				continue
 			}
-			slog.Info("logger(): accepted connection without error")
+			slog.Debug("logger.Run(): accepted connection without error")
 			handleConnWithCtx(conn, ch, ctx)
 		}
 	}

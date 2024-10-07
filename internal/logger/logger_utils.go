@@ -22,60 +22,59 @@ type BytesReader interface {
 var shutdownErr error = errors.New("got shutdown signal")
 
 func handleConnWithCtx(conn net.Conn, ch chan<- []byte, ctx context.Context) {
-	slog.Info("handling connection...")
+	slog.Info("handleConnWithCtx(): running...")
 	defer conn.Close()
 
 	reader := bufio.NewReader(conn)
 	for {
-		// select {
-		// case <-shutdwn:
-		// 	slog.Info("handleConn received shutdown signal. returning...")
-		// 	return
-		// default:
+		slog.Debug("handleConnWithCtx(): running loop...")
 		msg, err := ReadBytesWithCtx(reader, '\n', ctx)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				slog.Error(
-					"EOF while reading from net.Conn reader (conn closed?). returning",
+					"handleConnWithCtx(): EOF while reading from net.Conn reader (conn closed?). returning...",
 				)
 				return
-				// continue this doesn't make sense wtf // we continue so we can (probably) handle the shutdown case.
 			}
 			if errors.Is(err, shutdownErr) {
-				slog.Info("handleConn(): caught shutdownErr from ReadBytesWithShutdown()")
+				slog.Info(
+					"handleConnWithCtx(): caught shutdownErr from ReadBytesWithShutdown(). returning...",
+				)
 				return
-				// continue this doesn't make sense wtf // we continue so we can (probably) handle the shutdown case.
 			}
-			slog.Error( // if we get here, something went wrong :0
-				"error reading bytes from conn reader. finishing loop...", "error", err)
+			slog.Error(
+				"handleConnWithCtx(): error reading bytes from conn reader. finishing loop...",
+				"error",
+				err,
+			)
 		}
 		if len(msg) > 0 {
+			slog.Debug("handleConnWithCtx(): msg not empty. sending to ch...")
 			ch <- msg
 		}
-		// }
 	}
 }
 
 func logWithCtx(ch <-chan []byte, logger *lumberjack.Logger, ctx context.Context) {
-	slog.Info("starting log routine...")
+	slog.Info("logWithCtx(): starting routine...")
 	for {
 		select {
 		case <-ctx.Done():
-			slog.Info("log(): got cancel signal")
+			slog.Info("logWithCtx(): got cancel signal. writing to logger and returning...")
 			for i := len(ch); i > 0; i-- {
 				logger.Write(<-ch)
 			}
 			return
 		case msg, ok := <-ch:
-			slog.Info("log routine got message", "msg", msg)
+			slog.Debug("logWithCtx(): got message", "msg", msg)
 			if !ok { // channel is closed == we're shutting down (should be last step)
-				slog.Info("log routine met with closed channel (shutting down?). returning...")
+				slog.Info("logWithCtx(): channel is closed (shutting down?). returning...")
 				return
 			}
 			_, err := logger.Write(msg)
 			if err != nil {
 				slog.Error(
-					"lumberjack.Logger error writing entry. continuing loop...",
+					"logWithCtx(): lumberjack.Logger error writing entry. continuing loop...",
 					"error",
 					err,
 				)
@@ -86,21 +85,22 @@ func logWithCtx(ch <-chan []byte, logger *lumberjack.Logger, ctx context.Context
 }
 
 func shutdown(sigs chan os.Signal, cancel context.CancelFunc) {
+	slog.Info("shutdown(): starting routine...")
+
 	// we register the channel so it will get these sigs
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	s := <-sigs
-	slog.Info("before sending to shutdown") // we get here
-	cancel()
 	slog.Info(
 		fmt.Sprintf(
 			"shutdown routine caught %v sig. cancelling...",
 			s.String(),
 		),
-	) // and after changing the channel buffer size from 0 to 1, we get here
-	// however, we never get to the case <- shutdwn
+	)
+	cancel()
 }
 
 func ReadBytesWithCtx(r BytesReader, delim byte, ctx context.Context) ([]byte, error) {
+	slog.Debug("ReadBytesWithCtx(): called...")
 	ch := make(chan struct{})
 	var (
 		bb  []byte
@@ -117,9 +117,9 @@ func ReadBytesWithCtx(r BytesReader, delim byte, ctx context.Context) ([]byte, e
 			slog.Info("ReadBytesWithCtx(): got cancel signal. returning...")
 			return nil, shutdownErr
 		case <-ch:
-			slog.Info("Successfully reading from conn")
+			slog.Debug("ReadBytesWithCtx(): read from conn")
 			if len(bb) == 0 {
-				slog.Error("successfully read MY ASS. this byte slice is empty")
+				slog.Debug("ReadBytesWithCtx(): bytes from conn were empty")
 				return nil, err
 			}
 			return bb, err
@@ -131,6 +131,7 @@ func ReadBytesWithCtx(r BytesReader, delim byte, ctx context.Context) ([]byte, e
 // that will return nil, shutdownErr if the ctx i canceled before a connection
 // is accepted. Otherwise, returns conn, nil
 func AcceptWithCtx(l net.Listener, ctx context.Context) (net.Conn, error) {
+	slog.Info("AcceptWithCtx(): called...")
 	var (
 		conn net.Conn
 		err  error
