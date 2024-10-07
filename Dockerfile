@@ -7,9 +7,9 @@ ARG TARGETARCH
 WORKDIR /build
 COPY . .
 
-RUN go mod download; \
-  go vet -v ./...; \
-  go test -v ./...; \
+RUN go mod download && \
+  go vet -v ./... && \
+  go test -v ./... && \
   GOOS=${TARGETOS} GOARCH=${TARGETARCH} CGO_ENABLED=0 \
   go build -o ./tcplogger cmd/tcplogger/main.go
 
