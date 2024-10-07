@@ -13,7 +13,7 @@ RUN go mod download && \
   GOOS=${TARGETOS} GOARCH=${TARGETARCH} CGO_ENABLED=0 \
   go build -o ./tcplogger cmd/tcplogger/main.go
 
-FROM gcr.io/distroless/base-nossl-debian12:nonroot
+FROM gcr.io/distroless/base-nossl-debian12
 
 COPY --from=builder /build/tcplogger /
 
