@@ -7,14 +7,13 @@ ARG TARGETARCH
 WORKDIR /build
 COPY . .
 
-RUN go mod download
+RUN go mod download; \
+  go vet -v ./...; \
+  go test -v ./...; \
+  GOOS=${TARGETOS} GOARCH=${TARGETARCH} CGO_ENABLED=0 \
+  go build -o ./tcplogger cmd/tcplogger/main.go
 
-RUN go vet -v ./...
-RUN go test -v ./...
-
-RUN GOARCH=${TARGETOS} GOARCH=${TARGETARCH} go build -o ./tcplogger cmd/tcplogger/main.go
-
-FROM gcr.io/distroless/base-nossl-debian12
+FROM gcr.io/distroless/base-nossl-debian12:nonroot
 
 COPY --from=builder /build/tcplogger /
 
