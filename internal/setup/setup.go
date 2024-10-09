@@ -13,9 +13,9 @@ import (
 
 type Cfg struct {
 	Port     string
-	Logger   *lumberjack.Logger
 	Protocol string
 	Address  string
+	Logger   *lumberjack.Logger
 }
 
 type ArgError struct {
@@ -33,6 +33,14 @@ func (e *ArgError) Is(target error) bool {
 
 func (e *ArgError) Error() string {
 	return e.Err + ": " + fmt.Sprint(e.Param)
+}
+
+func getEnvOrDefaultLogLevel(key string, def slog.Level) (slog.Level, error) {
+	v, err := getEnvOrDefaultGen(key, def)
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
 }
 
 func getEnvOrDefaultString(key, def string) (string, error) {
@@ -59,7 +67,7 @@ func getEnvOrDefaultBool(key string, def bool) (bool, error) {
 	return v, nil
 }
 
-func getEnvOrDefaultGen[T string | bool | int](key string, def T) (T, error) {
+func getEnvOrDefaultGen[T string | bool | int | slog.Level](key string, def T) (T, error) {
 	var v T
 
 	// if this is a string..
@@ -91,10 +99,10 @@ func getEnvOrDefaultGen[T string | bool | int](key string, def T) (T, error) {
 	env, ok := os.LookupEnv(key)
 	switch {
 	case !ok:
-		slog.Info(fmt.Sprintf("env var <%v> not set up. using default <%v>", key, def))
+		slog.Info(fmt.Sprintf("env var <%v> not set. using default <%v>", key, def))
 		return def, nil
 	case env == "":
-		slog.Info(fmt.Sprintf("env var <%v> is set up, but empty. using default <%v>", key, def))
+		slog.Info(fmt.Sprintf("env var <%v> is set, but empty. using default <%v>", key, def))
 		return def, nil
 	}
 
@@ -113,40 +121,51 @@ func getEnvOrDefaultGen[T string | bool | int](key string, def T) (T, error) {
 			return v, err
 		}
 		v = any(b).(T)
+	case slog.Level:
+		levelMapper := map[string]slog.Level{
+			"DEBUG": slog.LevelDebug,
+			"INFO":  slog.LevelInfo,
+			"WARN":  slog.LevelWarn,
+			"ERROR": slog.LevelError,
+		}
+
+		v, ok := levelMapper[env]
+		if !ok {
+			slog.Error(fmt.Sprintf("invalid log level <%v> defaulting to <%v>", env, any(def).(slog.Level).Level().String()))
+			return def, nil
+		}
+		return any(v).(T), nil
 	}
 	return v, nil
 }
 
 func logger() *lumberjack.Logger {
-	filename, err := getEnvOrDefaultString("FILENAME", "/var/log/openwrt/openwrt.log")
-	if err != nil {
-		utils.SlogFatal(err.Error())
-	}
+	const (
+		defFilename     string = "/var/log/openwrt/openwrt.log"
+		defMaxSize      int    = 0
+		defMaxAge       int    = 180
+		defMaxBackups   int    = 0
+		defCompress     bool   = false
+		defUseLocalTime bool   = true
+	)
 
-	maxSize, err := getEnvOrDefaultInt("MAXSIZE", 0)
-	if err != nil {
-		utils.SlogFatal(err.Error())
-	}
+	filename, err := getEnvOrDefaultString("FILENAME", defFilename)
+	utils.Must(err)
 
-	maxAge, err := getEnvOrDefaultInt("MAXAGE", 180)
-	if err != nil {
-		utils.SlogFatal(err.Error())
-	}
+	maxSize, err := getEnvOrDefaultInt("MAXSIZE", defMaxSize)
+	utils.Must(err)
 
-	maxBackups, err := getEnvOrDefaultInt("MAXBACKUP", 0)
-	if err != nil {
-		utils.SlogFatal(err.Error())
-	}
+	maxAge, err := getEnvOrDefaultInt("MAXAGE", defMaxAge)
+	utils.Must(err)
 
-	compress, err := getEnvOrDefaultBool("COMPRESS", false)
-	if err != nil {
-		utils.SlogFatal(err.Error())
-	}
+	maxBackups, err := getEnvOrDefaultInt("MAXBACKUP", defMaxBackups)
+	utils.Must(err)
 
-	useLocalTime, err := getEnvOrDefaultBool("USELOCALTIME", true)
-	if err != nil {
-		utils.SlogFatal(err.Error())
-	}
+	compress, err := getEnvOrDefaultBool("COMPRESS", defCompress)
+	utils.Must(err)
+
+	useLocalTime, err := getEnvOrDefaultBool("USELOCALTIME", defUseLocalTime)
+	utils.Must(err)
 
 	return &lumberjack.Logger{
 		Filename:   filename,
@@ -159,25 +178,40 @@ func logger() *lumberjack.Logger {
 }
 
 func Config() *Cfg {
-	port, err := getEnvOrDefaultString("PORT", "8080")
-	if err != nil {
-		utils.SlogFatal(err.Error())
+	const (
+		defLogLevel slog.Level = slog.LevelInfo
+		defPort     string     = "8080"
+		defProtocol string     = "tcp"
+		defAddress  string     = "0.0.0.0"
+	)
+
+	// https://stackoverflow.com/a/76970969
+	l := new(slog.LevelVar)
+	l.Set(slog.LevelInfo) // this is how you dynamically the log level
+	slog.SetDefault(
+		slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: l})),
+	)
+
+	logLevel, err := getEnvOrDefaultLogLevel("LOGLEVEL", defLogLevel)
+	utils.Must(err)
+
+	if logLevel != slog.LevelInfo {
+		l.Set(logLevel)
 	}
 
-	protocol, err := getEnvOrDefaultString("PROTOCOL", "tcp")
-	if err != nil {
-		utils.SlogFatal(err.Error())
-	}
+	port, err := getEnvOrDefaultString("PORT", defPort)
+	utils.Must(err)
 
-	address, err := getEnvOrDefaultString("ADDRESS", "localhost")
-	if err != nil {
-		utils.SlogFatal(err.Error())
-	}
+	protocol, err := getEnvOrDefaultString("PROTOCOL", defProtocol)
+	utils.Must(err)
+
+	address, err := getEnvOrDefaultString("ADDRESS", defAddress)
+	utils.Must(err)
 
 	return &Cfg{
 		Port:     port,
-		Logger:   logger(),
 		Protocol: protocol,
 		Address:  address,
+		Logger:   logger(),
 	}
 }

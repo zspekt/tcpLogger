@@ -23,9 +23,8 @@ func Run(c *setup.Cfg) {
 	go logWithCtx(ch, logger, ctx)
 
 	listener, err := net.Listen(c.Protocol, c.Address+":"+c.Port)
-	if err != nil {
-		utils.SlogFatal("logger.Run(): fatal error creating listener", "error", err)
-	}
+	utils.Must(err)
+
 	defer listener.Close()
 
 	// declaring it here so we can close it on case <-shutdwn
